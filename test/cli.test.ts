@@ -29,3 +29,9 @@ test("capture.ts never invokes screencapture's interactive window picker", () =>
   expect(text).not.toContain("resolveWindowId");
   expect(text).not.toMatch(/args\.push\("-w"\)/);
 });
+
+test("VERSION comes from package.json", () => {
+  const raw = readFileSync(join(import.meta.dir, "..", "package.json"), "utf8");
+  const declared = JSON.parse(raw).version;
+  expect(VERSION).toBe(declared);
+});

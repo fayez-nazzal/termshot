@@ -14,8 +14,9 @@ import { emit } from "./run-result/emit.ts";
 import { exitCodeFor } from "./run-result/exit-codes.ts";
 import { runTermshot } from "./run.ts";
 import type { RunPorts } from "./run.ts";
+import packageJson from "../package.json";
 
-export const VERSION = "0.5.0";
+export const VERSION = packageJson.version;
 export { DEFAULT_RUN_COLS, DEFAULT_RUN_ROWS } from "./invocation/flags.ts";
 
 function timestamp(): string {
