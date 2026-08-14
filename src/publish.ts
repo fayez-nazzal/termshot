@@ -1,15 +1,16 @@
 // Upload a captured file to a Google Drive rclone remote, make it public, and
-// build the PR-ready embed. Shares helpers with
-// annotate.ts, cleanshotAnnotateUrl, and clipboardScript. Operates on the file
-// path and URLs only and never reads the image bytes: rclone moves the file by
-// path, curl checks a URL header.
+// build the PR-ready embed. Operates on the file path and URLs only and never
+// reads the image bytes: rclone moves the file by path, curl checks a URL header.
+//
+// This file is deliberately duplicated with browsershot rather than shared. The
+// contract test beside it pins the observable behaviour so drift fails this
+// repo's own suite.
 
 export const DEFAULT_EMBED_WIDTH = 2560;
 
 export interface PublishOptions {
   filePath: string;
   dest: string;
-  isGif: boolean;
   size: number;
   label: string;
 }
@@ -75,10 +76,6 @@ export function embedUrl(fileId: string, size: number): string {
 
 export function pngMarkdown(label: string, url: string): string {
   return `![${label}](${url})`;
-}
-
-export function gifInstruction(localPath: string, archiveUrl: string): string {
-  return `GIF: drag ${localPath} into the PR description editor to embed the animation; Drive archive: ${archiveUrl}.`;
 }
 
 export function rcloneRemoteConfigured(remote: string, listRemotesOutput: string): boolean {
@@ -162,29 +159,25 @@ export function publish(opts: PublishOptions): PublishResult {
   const shareUrl = driveShareUrl(remotePath);
 
   let result: PublishResult;
-  if (opts.isGif) {
-    result = { markdown: gifInstruction(opts.filePath, shareUrl), url: shareUrl, fileId: extractDriveFileId(shareUrl) };
-  } else {
-    let attempt = 0;
-    let verified = false;
-    let url = "";
-    let fileId = extractDriveFileId(shareUrl);
-    while (attempt < 2 && !verified) {
-      if (attempt > 0) {
-        fileId = extractDriveFileId(driveShareUrl(remotePath));
-      }
-      if (fileId === null) {
-        throw new Error(`could not extract a Drive file id from the share url`);
-      }
-      url = embedUrl(fileId, opts.size);
-      const head = runCommand(["curl", "-sIL", url]);
-      verified = imageHeadersOk(head.stdout);
-      attempt = attempt + 1;
+  let attempt = 0;
+  let verified = false;
+  let url = "";
+  let fileId = extractDriveFileId(shareUrl);
+  while (attempt < 2 && !verified) {
+    if (attempt > 0) {
+      fileId = extractDriveFileId(driveShareUrl(remotePath));
     }
-    if (!verified) {
-      throw new Error(`embed url did not verify as a 200 image for ${url}`);
+    if (fileId === null) {
+      throw new Error(`could not extract a Drive file id from the share url`);
     }
-    result = { markdown: pngMarkdown(opts.label, url), url, fileId };
+    url = embedUrl(fileId, opts.size);
+    const head = runCommand(["curl", "-sIL", url]);
+    verified = imageHeadersOk(head.stdout);
+    attempt = attempt + 1;
   }
+  if (!verified) {
+    throw new Error(`embed url did not verify as a 200 image for ${url}`);
+  }
+  result = { markdown: pngMarkdown(opts.label, url), url, fileId };
   return result;
 }

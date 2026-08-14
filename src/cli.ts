@@ -74,7 +74,7 @@ function buildLivePorts(): RunPorts {
       sleep: (ms: number) => Bun.sleepSync(ms),
     },
     publisher: {
-      publish: (filePath: string, dest: string, size: number, label: string) => publish({ filePath, dest, isGif: false, size, label }),
+      publish: (filePath: string, dest: string, size: number, label: string) => publish({ filePath, dest, size, label }),
     },
   };
 }
