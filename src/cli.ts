@@ -3,7 +3,8 @@
 import { readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { captureScreen, closeGhosttyProcess, launchGhostty, uniqueWindowTitle, waitForWindow } from "./capture.ts";
+import { captureScreen, closeGhosttyProcess, uniqueWindowTitle, waitForWindow } from "./capture.ts";
+import { processSignalPort, launchSession } from "./terminal-session/session.ts";
 import { publish } from "./publish.ts";
 import { writeArtifact } from "./screen-capture/artifact.ts";
 import { parseFlags } from "./invocation/flags.ts";
@@ -38,10 +39,23 @@ function readStatusFile(path: string): string {
 }
 
 function buildLivePorts(): RunPorts {
+  const sessionDisposers = new Map<number, () => void>();
+  const signals = processSignalPort();
   return {
     session: {
-      launch: launchGhostty,
-      dispose: closeGhosttyProcess,
+      launch: (title: string, script: string, cols: number, rows: number) => {
+        const session = launchSession(title, script, cols, rows, signals);
+        sessionDisposers.set(session.pid, session.dispose);
+        return session.pid;
+      },
+      dispose: (pid: number) => {
+        const dispose = sessionDisposers.get(pid);
+        if (dispose != null) {
+          dispose();
+        } else {
+          closeGhosttyProcess(pid);
+        }
+      },
     },
     windows: {
       waitForWindow,

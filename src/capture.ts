@@ -64,7 +64,15 @@ export const GHOSTTY_BIN = "/Applications/Ghostty.app/Contents/MacOS/ghostty";
 export const SETTLE_BEFORE_CLEAR_SECONDS = 0.25;
 export const CLEAR_SCREEN = "printf '\\033[2J\\033[3J\\033[H'";
 export const TIDY_TAIL = "printf '\\033[J\\033[?25l'";
-export const HOLD_WINDOW_OPEN_SECONDS = 300;
+// Derived from the same budget termshot itself gives up on: run.ts waits up
+// to WINDOW_TIMEOUT_MS for the window to appear and up to COMMAND_TIMEOUT_MS
+// for the command to finish. Signal-safe disposal (terminal-session/session.ts)
+// closes the window promptly in the normal case; this hold is only the
+// worst-case backstop for a hard crash no signal handler can catch, so it
+// should track that budget rather than sit open for a flat five minutes.
+const WINDOW_WAIT_BUDGET_SECONDS = 15; // mirrors run.ts's WINDOW_TIMEOUT_MS
+const COMMAND_RUN_BUDGET_SECONDS = 60; // mirrors run.ts's COMMAND_TIMEOUT_MS
+export const HOLD_WINDOW_OPEN_SECONDS = WINDOW_WAIT_BUDGET_SECONDS + COMMAND_RUN_BUDGET_SECONDS;
 
 export function wrappedCommand(command: string): string {
   return `sleep ${SETTLE_BEFORE_CLEAR_SECONDS}; ${CLEAR_SCREEN}; ${command}; ${TIDY_TAIL}; sleep ${HOLD_WINDOW_OPEN_SECONDS}`;

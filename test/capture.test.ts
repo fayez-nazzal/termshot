@@ -39,8 +39,9 @@ test("wrappedCommand settles before clearing the login banner", () => {
   expect(wrappedCommand("echo hi")).toStartWith("sleep 0.25; printf '\\033[2J\\033[3J\\033[H'; ");
 });
 
-test("wrappedCommand holds the window open so the Ghostty exit banner never renders", () => {
-  expect(wrappedCommand("echo hi")).toEndWith("; sleep 300");
+test("wrappedCommand holds the window open so the Ghostty exit banner never renders, for a hold derived from the capture budget rather than a flat five minutes", () => {
+  expect(wrappedCommand("echo hi")).toMatch(/; sleep \d+$/);
+  expect(wrappedCommand("echo hi")).not.toEndWith("; sleep 300");
 });
 
 test("wrappedCommand wipes below the output and hides the cursor once the command is done", () => {
