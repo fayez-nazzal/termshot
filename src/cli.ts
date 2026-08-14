@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { captureScreen, closeGhosttyProcess, launchGhosttyScript, uniqueWindowTitle, waitForWindow } from "./capture.ts";
+import { captureScreen, closeGhosttyProcess, launchGhostty, uniqueWindowTitle, waitForWindow } from "./capture.ts";
 import { publish } from "./publish.ts";
 import { writeArtifact } from "./screen-capture/artifact.ts";
 import { parseFlags } from "./invocation/flags.ts";
@@ -40,7 +40,7 @@ function readStatusFile(path: string): string {
 function buildLivePorts(): RunPorts {
   return {
     session: {
-      launch: launchGhosttyScript,
+      launch: launchGhostty,
       dispose: closeGhosttyProcess,
     },
     windows: {

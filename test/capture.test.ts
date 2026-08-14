@@ -1,18 +1,8 @@
 import { expect, test } from "bun:test";
-import { captureScreen, listWindows, uniqueWindowTitle, ghosttyLaunchArgs, ghosttyScriptArgs, wrappedCommand } from "../src/capture.ts";
+import { captureScreen, uniqueWindowTitle, ghosttyLaunchArgs, wrappedCommand } from "../src/capture.ts";
 
 test.skipIf(process.platform === "darwin")("captureScreen throws on unsupported platforms", () => {
   expect(() => captureScreen({ windowId: 1 })).toThrow(/not supported/);
-});
-
-test.skipIf(process.platform !== "darwin")("listWindows returns id/owner/pid entries on macOS", () => {
-  const wins = listWindows();
-  expect(Array.isArray(wins)).toBe(true);
-  for (const w of wins) {
-    expect(typeof w.id).toBe("number");
-    expect(typeof w.owner).toBe("string");
-    expect(typeof w.pid).toBe("number");
-  }
 });
 
 test("uniqueWindowTitle looks like termshot-<pid>-<ms> and varies over time", () => {
@@ -21,8 +11,11 @@ test("uniqueWindowTitle looks like termshot-<pid>-<ms> and varies over time", ()
   expect(a.startsWith(`termshot-${process.pid}-`)).toBe(true);
 });
 
-test("ghosttyLaunchArgs invokes the bundled binary directly with title, grid size, wait, and -e sh -c, padded with a trailing sleep", () => {
-  const args = ghosttyLaunchArgs("termshot-1-2", "starship --version", 120, 30);
+// wrappedCommand builds the script passed to ghosttyLaunchArgs; command-run/inner-script.ts
+// is what calls wrappedCommand once and hands the already-built script through here.
+test("ghosttyLaunchArgs invokes the bundled binary directly with title, grid size, wait, and -e sh -c, passing an already-built script through unwrapped", () => {
+  const script = wrappedCommand("starship --version");
+  const args = ghosttyLaunchArgs("termshot-1-2", script, 120, 30);
   expect(args).toEqual([
     "/Applications/Ghostty.app/Contents/MacOS/ghostty",
     "--title=termshot-1-2",
@@ -34,7 +27,7 @@ test("ghosttyLaunchArgs invokes the bundled binary directly with title, grid siz
     "-e",
     "sh",
     "-c",
-    "sleep 0.25; printf '\\033[2J\\033[3J\\033[H'; starship --version; printf '\\033[J\\033[?25l'; sleep 300",
+    script,
   ]);
 });
 
@@ -70,25 +63,4 @@ test("ghosttyLaunchArgs embeds custom cols and rows as grid-cell window size", (
 test("ghosttyLaunchArgs always disables window decoration so no titlebar is captured", () => {
   const args = ghosttyLaunchArgs("termshot-9-9", "echo hi", 100, 25);
   expect(args).toContain("--window-decoration=none");
-});
-
-// ghosttyScriptArgs shares the flag set with ghosttyLaunchArgs, but the caller
-// has already built the inner script (see command-run/inner-script.ts), so it
-// must be passed through unwrapped instead of going through wrappedCommand again.
-test("ghosttyScriptArgs passes an already-built script through without wrapping it again", () => {
-  const script = "sleep 0.25; printf '\\033[2J\\033[3J\\033[H'; starship --version; echo $? > /tmp/x.status; printf '\\033[J\\033[?25l'; sleep 300";
-  const args = ghosttyScriptArgs("termshot-1-2", script, 120, 30);
-  expect(args).toEqual([
-    "/Applications/Ghostty.app/Contents/MacOS/ghostty",
-    "--title=termshot-1-2",
-    "--window-decoration=none",
-    "--window-width=120",
-    "--window-height=30",
-    "--window-save-state=never",
-    "--wait-after-command=false",
-    "-e",
-    "sh",
-    "-c",
-    script,
-  ]);
 });
