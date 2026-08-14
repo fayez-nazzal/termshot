@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+*.log
+.cache/
+.DS_Store
+*.png
+!test/fixtures/*.png
+bun.lock
