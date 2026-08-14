@@ -6,8 +6,13 @@ import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { captureScreen, launchGhostty, uniqueWindowTitle, waitForWindow, closeGhosttyProcess } from "./capture.ts";
 import { publish, labelFromPath, DEFAULT_EMBED_WIDTH } from "./publish.ts";
+import { buildResult } from "./run-result/build.ts";
+import { emit } from "./run-result/emit.ts";
+import { exitCodeFor } from "./run-result/exit-codes.ts";
+import type { RunResult, RunStatus } from "./run-result/result.ts";
 
 export const VERSION = "0.5.0";
+const TOOL = "termshot";
 
 export const DEFAULT_RUN_COLS = 120;
 export const DEFAULT_RUN_ROWS = 30;
@@ -71,28 +76,38 @@ function intFlag(name: string, raw: string): number {
   return n;
 }
 
-function fail(msg: string): never {
-  process.stderr.write(`termshot: ${msg}\n`);
-  process.exit(1);
+function finish(status: RunStatus, step: string, message?: string): never {
+  const errors = [];
+  if (message != null) {
+    errors.push({ step, message });
+  }
+  const result = buildResult({ tool: TOOL, version: VERSION, status, errors });
+  emit(result);
+  process.exit(exitCodeFor(result));
 }
 
-function rejectRemovedFlags(argv: string[]): void {
+function findRemovedFlag(argv: string[]): string | undefined {
+  let result: string | undefined;
   for (const raw of argv) {
     const name = raw.replace(/^--?/, "").split("=")[0]!;
-    if (REMOVED_FLAGS.includes(name)) {
-      fail(`--${name} was removed; termshot only supports --run`);
+    if (result == null && REMOVED_FLAGS.includes(name)) {
+      result = name;
     }
   }
+  return result;
 }
 
 function main() {
-  rejectRemovedFlags(process.argv.slice(2));
+  const removedFlag = findRemovedFlag(process.argv.slice(2));
+  if (removedFlag != null) {
+    finish("usage-error", "flags", `--${removedFlag} was removed; termshot only supports --run`);
+  }
 
   let values: ReturnType<typeof parse>;
   try {
     values = parse();
   } catch (e) {
-    fail((e as Error).message);
+    finish("usage-error", "flags", (e as Error).message);
   }
 
   if (values.help) {
@@ -101,7 +116,7 @@ function main() {
     process.stdout.write(`${VERSION}\n`);
   } else {
     if (values.run == null) {
-      fail("--run <command> is required");
+      finish("usage-error", "flags", "--run <command> is required");
     }
 
     let settleMs = 500;
@@ -122,7 +137,7 @@ function main() {
         publishSize = intFlag("publish-size", values["publish-size"]);
       }
     } catch (e) {
-      fail((e as Error).message);
+      finish("usage-error", "flags", (e as Error).message);
     }
 
     const title = uniqueWindowTitle();
@@ -132,7 +147,7 @@ function main() {
       ghosttyPid = launchGhostty(title, values.run, cols, rows);
       windowId = waitForWindow(ghosttyPid, 15000);
     } catch (e) {
-      fail((e as Error).message);
+      finish("environment-error", "terminal-session", (e as Error).message);
     }
     Bun.sleepSync(settleMs);
 
@@ -141,7 +156,7 @@ function main() {
       png = captureScreen({ windowId });
     } catch (e) {
       closeGhosttyProcess(ghosttyPid);
-      fail((e as Error).message);
+      finish("environment-error", "screen-capture", (e as Error).message);
     }
     closeGhosttyProcess(ghosttyPid);
 
@@ -151,7 +166,8 @@ function main() {
     }
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, png);
-    process.stderr.write(`termshot: wrote ${out} (${png.length} bytes)\n`);
+
+    let result: RunResult;
     if (values.publish != null) {
       let label = labelFromPath(out);
       if (values["publish-label"] != null) {
@@ -159,11 +175,33 @@ function main() {
       }
       try {
         const published = publish({ filePath: out, dest: values.publish, isGif: false, size: publishSize, label });
-        process.stdout.write(`${published.markdown}\n`);
+        result = buildResult({
+          tool: TOOL,
+          version: VERSION,
+          status: "ok",
+          capture: { path: out, bytes: png.length },
+          publish: { requested: true, url: published.url, markdown: published.markdown, verified: true },
+        });
       } catch (e) {
-        fail(`wrote ${out}, but publish failed: ${(e as Error).message}`);
+        result = buildResult({
+          tool: TOOL,
+          version: VERSION,
+          status: "publish-failed",
+          capture: { path: out, bytes: png.length },
+          publish: { requested: true },
+          errors: [{ step: "publish", message: (e as Error).message }],
+        });
       }
+    } else {
+      result = buildResult({
+        tool: TOOL,
+        version: VERSION,
+        status: "ok",
+        capture: { path: out, bytes: png.length },
+      });
     }
+    emit(result);
+    process.exit(exitCodeFor(result));
   }
 }
 

@@ -18,7 +18,7 @@ test("default --run grid is wide enough to render wider than tall", () => {
 for (const flag of REMOVED_FLAGS) {
   test(`${flag} exits with a usage error instead of running`, () => {
     const proc = Bun.spawnSync(["bun", "src/cli.ts", flag]);
-    expect(proc.exitCode).toBe(1);
+    expect(proc.exitCode).toBe(2);
     const err = new TextDecoder().decode(proc.stderr);
     expect(err).toContain("was removed");
   });
