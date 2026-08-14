@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 
-import { homedir } from "node:os";
+import { readFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { captureScreen, closeGhosttyProcess, launchGhostty, uniqueWindowTitle, waitForWindow } from "./capture.ts";
+import { captureScreen, closeGhosttyProcess, launchGhosttyScript, uniqueWindowTitle, waitForWindow } from "./capture.ts";
 import { publish } from "./publish.ts";
 import { writeArtifact } from "./screen-capture/artifact.ts";
 import { parseFlags } from "./invocation/flags.ts";
@@ -26,10 +27,20 @@ function defaultOutputPath(): string {
   return join(homedir(), "termshot", `${timestamp()}.png`);
 }
 
+function readStatusFile(path: string): string {
+  let result = "";
+  try {
+    result = readFileSync(path, "utf8");
+  } catch {
+    result = "";
+  }
+  return result;
+}
+
 function buildLivePorts(): RunPorts {
   return {
     session: {
-      launch: launchGhostty,
+      launch: launchGhosttyScript,
       dispose: closeGhosttyProcess,
     },
     windows: {
@@ -42,7 +53,7 @@ function buildLivePorts(): RunPorts {
       write: writeArtifact,
     },
     statusStore: {
-      read: () => "",
+      read: readStatusFile,
     },
     clock: {
       now: () => Date.now(),
@@ -68,7 +79,8 @@ function main() {
   } else {
     const outputPath = flags.invocation.output ?? defaultOutputPath();
     const title = uniqueWindowTitle();
-    const result = runTermshot(VERSION, flags.invocation, outputPath, buildLivePorts(), title);
+    const statusPath = join(tmpdir(), `${title}.status`);
+    const result = runTermshot(VERSION, flags.invocation, outputPath, statusPath, buildLivePorts(), title);
     emit(result);
     process.exit(exitCodeFor(result));
   }

@@ -138,6 +138,18 @@ export function launchGhostty(title: string, command: string, cols: number, rows
   return proc.pid;
 }
 
+// Same flag set as ghosttyLaunchArgs, but `script` is already a fully built
+// inner script (see command-run/inner-script.ts) and is passed through as-is
+// instead of being wrapped again.
+export function ghosttyScriptArgs(title: string, script: string, cols: number, rows: number): string[] {
+  return [GHOSTTY_BIN, `--title=${title}`, `--window-decoration=none`, `--window-width=${cols}`, `--window-height=${rows}`, "--window-save-state=never", "--wait-after-command=false", "-e", "sh", "-c", script];
+}
+
+export function launchGhosttyScript(title: string, script: string, cols: number, rows: number): number {
+  const proc = Bun.spawn(ghosttyScriptArgs(title, script, cols, rows), { stdout: "ignore", stderr: "ignore" });
+  return proc.pid;
+}
+
 export function findWindowIdByPid(pid: number): number | undefined {
   const wins = listWindows();
   let result: number | undefined;

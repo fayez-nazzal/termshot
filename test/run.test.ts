@@ -42,7 +42,7 @@ function fakePorts(artifactMap: Map<string, Uint8Array>): RunPorts {
       },
     },
     statusStore: {
-      read: () => "",
+      read: () => "0",
     },
     clock: {
       now: () => 0,
@@ -59,7 +59,7 @@ function fakePorts(artifactMap: Map<string, Uint8Array>): RunPorts {
 test("a capture survives a failing downstream publish step", () => {
   const artifactMap = new Map<string, Uint8Array>();
   const ports = fakePorts(artifactMap);
-  const result = runTermshot("0.5.0", INVOCATION, "/fake/out.png", ports, "termshot-test");
+  const result = runTermshot("0.5.0", INVOCATION, "/fake/out.png", "/fake/out.status", ports, "termshot-test");
 
   expect(artifactMap.size).toBe(1);
   expect(artifactMap.has("/fake/out.png")).toBe(true);
@@ -68,5 +68,26 @@ test("a capture survives a failing downstream publish step", () => {
   expect(result.errors[0]!.step).toBe("publish");
   expect(exitCodeFor(result)).toBe(6);
   expect(exitCodeFor(result)).not.toBe(1);
+  expect(exitCodeFor(result)).not.toBe(3);
+});
+
+test("a child command exit code of 3 is reported as 3 in the result, not mistaken for a termshot environment error", () => {
+  const artifactMap = new Map<string, Uint8Array>();
+  const ports = fakePorts(artifactMap);
+  const statusReads = ["", "3"];
+  ports.statusStore.read = () => statusReads.shift() ?? "3";
+  let elapsedMs = 0;
+  ports.clock.now = () => elapsedMs;
+  ports.clock.sleep = (ms: number) => {
+    elapsedMs = elapsedMs + ms;
+  };
+  ports.publisher.publish = () => ({ url: "https://example.com/x.png", markdown: "![x](https://example.com/x.png)" });
+
+  const result = runTermshot("0.5.0", { ...INVOCATION, publishDest: null }, "/fake/out.png", "/fake/out.status", ports, "termshot-test");
+
+  expect(result.command.exitStatus).toBe(3);
+  expect(result.status).toBe("command-failed");
+  expect(result.command.timedOut).toBe(false);
+  expect(exitCodeFor(result)).toBe(1);
   expect(exitCodeFor(result)).not.toBe(3);
 });

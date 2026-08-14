@@ -1,11 +1,14 @@
 import type { ArtifactRecord } from "./screen-capture/artifact.ts";
 import { pngHeader } from "./screen-capture/png-header.ts";
 import { buildResult } from "./run-result/build.ts";
+import { buildRunPlan } from "./command-run/run-plan.ts";
+import { runCommand } from "./command-run/runner.ts";
+import type { ClockPort, StatusStorePort } from "./command-run/runner.ts";
 import type { Invocation } from "./invocation/invocation.ts";
 import type { RunError, RunResult, RunStatus } from "./run-result/result.ts";
 
 export interface SessionPort {
-  launch(title: string, command: string, cols: number, rows: number): number;
+  launch(title: string, script: string, cols: number, rows: number): number;
   dispose(pid: number): void;
 }
 
@@ -19,15 +22,6 @@ export interface CapturePort {
 
 export interface ArtifactsPort {
   write(path: string, data: Uint8Array): ArtifactRecord;
-}
-
-export interface StatusStorePort {
-  read(path: string): string;
-}
-
-export interface ClockPort {
-  now(): number;
-  sleep(ms: number): void;
 }
 
 export interface PublishedRecord {
@@ -51,19 +45,20 @@ export interface RunPorts {
 
 const TOOL = "termshot";
 const WINDOW_TIMEOUT_MS = 15000;
+const COMMAND_TIMEOUT_MS = 60000;
 
-function failure(version: string, status: RunStatus, step: string, message: string, capture?: ArtifactRecord): RunResult {
+function failure(version: string, status: RunStatus, step: string, message: string): RunResult {
   const errors: RunError[] = [{ step, message }];
-  const captureFacts = capture != null ? { path: capture.path, bytes: capture.bytes, sha256: capture.sha256 } : {};
-  return buildResult({ tool: TOOL, version, status, errors, capture: captureFacts });
+  return buildResult({ tool: TOOL, version, status, errors });
 }
 
-export function runTermshot(version: string, invocation: Invocation, outputPath: string, ports: RunPorts, title: string): RunResult {
+export function runTermshot(version: string, invocation: Invocation, outputPath: string, statusPath: string, ports: RunPorts, title: string): RunResult {
   let result: RunResult;
+  const plan = buildRunPlan(invocation, statusPath);
 
   let pid: number;
   try {
-    pid = ports.session.launch(title, invocation.command, invocation.cols, invocation.rows);
+    pid = ports.session.launch(title, plan.innerScriptText, invocation.cols, invocation.rows);
   } catch (e) {
     result = failure(version, "environment-error", "terminal-session", (e as Error).message);
     return result;
@@ -79,6 +74,19 @@ export function runTermshot(version: string, invocation: Invocation, outputPath:
   }
 
   ports.clock.sleep(invocation.settleMs);
+
+  const commandRun = runCommand(plan, ports.statusStore, ports.clock, COMMAND_TIMEOUT_MS);
+  if (commandRun.timedOut) {
+    ports.session.dispose(pid);
+    result = buildResult({
+      tool: TOOL,
+      version,
+      status: "timeout",
+      command: { argv: [invocation.command], exitStatus: null, durationMs: commandRun.durationMs, timedOut: true },
+      errors: [{ step: "command-run", message: `command did not finish within ${COMMAND_TIMEOUT_MS}ms` }],
+    });
+    return result;
+  }
 
   let png: Uint8Array;
   try {
@@ -103,7 +111,13 @@ export function runTermshot(version: string, invocation: Invocation, outputPath:
     errors.push({ step: "screen-capture", message: (e as Error).message });
   }
 
-  let status: RunStatus = errors.length > 0 ? "internal-error" : "ok";
+  let status: RunStatus = "ok";
+  if (commandRun.exitStatus !== 0) {
+    status = "command-failed";
+  } else if (errors.length > 0) {
+    status = "internal-error";
+  }
+
   let publishUrl: string | null = null;
   let publishMarkdown: string | null = null;
   let publishVerified = false;
@@ -124,6 +138,7 @@ export function runTermshot(version: string, invocation: Invocation, outputPath:
     tool: TOOL,
     version,
     status,
+    command: { argv: [invocation.command], exitStatus: commandRun.exitStatus, durationMs: commandRun.durationMs, timedOut: false },
     capture: { path: artifact.path, bytes: artifact.bytes, sha256: artifact.sha256, width, height },
     publish: { requested: invocation.publishDest != null, url: publishUrl, markdown: publishMarkdown, verified: publishVerified },
     errors,
