@@ -18,9 +18,6 @@ export interface CaptureResult {
 export interface TerminalResult {
   cols: number | null;
   rows: number | null;
-  renderedRows: number | null;
-  truncated: boolean;
-  overflowRows: number | null;
 }
 
 export interface PublishResult {

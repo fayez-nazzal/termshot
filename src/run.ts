@@ -140,6 +140,7 @@ export function runTermshot(version: string, invocation: Invocation, outputPath:
     status,
     command: { argv: [invocation.command], exitStatus: commandRun.exitStatus, durationMs: commandRun.durationMs, timedOut: false },
     capture: { path: artifact.path, bytes: artifact.bytes, sha256: artifact.sha256, width, height },
+    terminal: { cols: invocation.cols, rows: invocation.rows },
     publish: { requested: invocation.publishDest != null, url: publishUrl, markdown: publishMarkdown, verified: publishVerified },
     errors,
   });

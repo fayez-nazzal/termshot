@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { remoteName, normalizeDest, basename, labelFromPath, extractDriveFileId, embedUrl, pngMarkdown, rcloneRemoteConfigured, imageHeadersOk, DEFAULT_EMBED_WIDTH } from "../src/publish.ts";
+import { remoteName, normalizeDest, basename, extractDriveFileId, embedUrl, pngMarkdown, rcloneRemoteConfigured, imageHeadersOk, DEFAULT_EMBED_WIDTH } from "../src/publish.ts";
 
 test("remoteName reads the segment before the first colon", () => {
   expect(remoteName("gdrive:PR-Shots/repo/branch/")).toBe("gdrive");
@@ -19,12 +19,6 @@ test("normalizeDest guarantees a single trailing slash", () => {
 test("basename returns the last path segment", () => {
   expect(basename("/Users/x/shots/home.png")).toBe("home.png");
   expect(basename("home.png")).toBe("home.png");
-});
-
-test("labelFromPath drops the directory and extension", () => {
-  expect(labelFromPath("/Users/x/shots/auth-after.png")).toBe("auth-after");
-  expect(labelFromPath("home.gif")).toBe("home");
-  expect(labelFromPath("noext")).toBe("noext");
 });
 
 test("extractDriveFileId reads the id from open and /d/ urls", () => {

@@ -47,16 +47,6 @@ export function basename(filePath: string): string {
   return result;
 }
 
-export function labelFromPath(filePath: string): string {
-  const base = basename(filePath);
-  let result = base;
-  const dot = base.lastIndexOf(".");
-  if (dot > 0) {
-    result = base.slice(0, dot);
-  }
-  return result;
-}
-
 export function extractDriveFileId(link: string): string | null {
   let result: string | null = null;
   const m = /(?:\/d\/|[?&]id=)([A-Za-z0-9_-]+)/.exec(link);

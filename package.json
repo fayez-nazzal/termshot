@@ -1,6 +1,6 @@
 {
   "name": "termshot",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Capture the screen to a PNG via the OS (macOS screencapture).",
   "license": "MIT",
   "type": "module",

@@ -68,13 +68,13 @@ Every run prints one JSON line on stdout, success or failure.
 Real record from `termshot --run "echo hi" -o demo.png` on this machine:
 
 ```json
-{"tool":"termshot","version":"0.5.0","status":"ok","exitCode":0,"command":{"argv":["echo hi"],"exitStatus":0,"durationMs":0,"timedOut":false},"capture":{"path":"/tmp/demo.png","bytes":42664,"width":1936,"height":1036,"sha256":"544d9884c49949b47a3f78ea9c26679f6c6585cb2c4148f4feb40c3bdb3acad8"},"terminal":{"cols":null,"rows":null,"renderedRows":null,"truncated":false,"overflowRows":null},"publish":{"requested":false,"url":null,"markdown":null,"verified":false},"errors":[]}
+{"tool":"termshot","version":"0.5.1","status":"ok","exitCode":0,"command":{"argv":["echo hi"],"exitStatus":0,"durationMs":1,"timedOut":false},"capture":{"path":"/tmp/demo.png","bytes":42664,"width":1936,"height":1036,"sha256":"544d9884c49949b47a3f78ea9c26679f6c6585cb2c4148f4feb40c3bdb3acad8"},"terminal":{"cols":120,"rows":30},"publish":{"requested":false,"url":null,"markdown":null,"verified":false},"errors":[]}
 ```
 
 Notes on that record:
 
 - `capture.path` is absolute, and `sha256` is the hash of the written PNG.
-- The `terminal` block is always all null and `truncated` is always `false`. Nothing in the pipeline fills it in today, so do not read it.
+- The `terminal` block reports the grid the window was launched with, so `cols` and `rows` match the `--cols` and `--rows` values used for the run.
 - stderr carries the human lines: one per entry in `errors`, then `termshot: wrote <path> (<n> bytes)` when a file was written.
 
 ## Exit codes

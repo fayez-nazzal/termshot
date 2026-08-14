@@ -91,3 +91,14 @@ test("a child command exit code of 3 is reported as 3 in the result, not mistake
   expect(exitCodeFor(result)).toBe(1);
   expect(exitCodeFor(result)).not.toBe(3);
 });
+
+test("the terminal block reports the grid the window was launched with", () => {
+  const artifactMap = new Map<string, Uint8Array>();
+  const ports = fakePorts(artifactMap);
+  ports.publisher.publish = () => ({ url: "https://example.com/x", markdown: "![x](https://example.com/x)" });
+  const result = runTermshot("0.5.0", INVOCATION, "/fake/out.png", "/fake/out.status", ports, "termshot-test");
+
+  expect(result.terminal.cols).toBe(120);
+  expect(result.terminal.rows).toBe(30);
+  expect(Object.keys(result.terminal)).toEqual(["cols", "rows"]);
+});
