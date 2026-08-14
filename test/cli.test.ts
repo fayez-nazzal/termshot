@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { cleanshotAnnotateUrl, clipboardScript, DEFAULT_RUN_COLS, DEFAULT_RUN_ROWS, VERSION } from "../src/cli.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { DEFAULT_RUN_COLS, DEFAULT_RUN_ROWS, VERSION } from "../src/cli.ts";
+
+const REMOVED_FLAGS = ["--annotate", "--copy", "--window-pick", "--box", "--marker", "--list", "--window", "--stdout"];
 
 test("VERSION is a semver string", () => {
   expect(VERSION).toMatch(/^\d+\.\d+\.\d+$/);
@@ -11,12 +15,17 @@ test("default --run grid is wide enough to render wider than tall", () => {
   expect(DEFAULT_RUN_COLS).toBeGreaterThanOrEqual(DEFAULT_RUN_ROWS * 4);
 });
 
-test("cleanshotAnnotateUrl URL-encodes the file path", () => {
-  const url = cleanshotAnnotateUrl("/tmp/my shot.png");
-  expect(url).toBe("cleanshot://open-annotate?filepath=%2Ftmp%2Fmy%20shot.png");
-});
+for (const flag of REMOVED_FLAGS) {
+  test(`${flag} exits with a usage error instead of running`, () => {
+    const proc = Bun.spawnSync(["bun", "src/cli.ts", flag]);
+    expect(proc.exitCode).toBe(1);
+    const err = new TextDecoder().decode(proc.stderr);
+    expect(err).toContain("was removed");
+  });
+}
 
-test("clipboardScript embeds the path and escapes quotes", () => {
-  expect(clipboardScript("/tmp/shot.png")).toBe('set the clipboard to (read (POSIX file "/tmp/shot.png") as «class PNGf»)');
-  expect(clipboardScript('/tmp/a"b.png')).toContain('POSIX file "/tmp/a\\"b.png"');
+test("capture.ts never invokes screencapture's interactive window picker", () => {
+  const text = readFileSync(join(import.meta.dir, "..", "src", "capture.ts"), "utf8");
+  expect(text).not.toContain("resolveWindowId");
+  expect(text).not.toMatch(/args\.push\("-w"\)/);
 });

@@ -5,9 +5,7 @@ import { join } from "node:path";
 import { readFileSync, unlinkSync } from "node:fs";
 
 export interface CaptureOptions {
-  window?: boolean; // macOS: interactive window pick (-w) instead of full display
-  windowId?: number; // macOS: capture a specific window by CGWindowID (-l), non-interactive
-  match?: string; // macOS: resolve a CGWindowID by matching window owner/title, then capture it
+  windowId: number; // macOS: capture a specific window by CGWindowID (-l), non-interactive
 }
 
 export interface WindowInfo {
@@ -19,7 +17,7 @@ export interface WindowInfo {
 }
 
 // Capture a PNG via the OS screenshot tool. Returns PNG bytes.
-export function captureScreen(opts: CaptureOptions = {}): Uint8Array {
+export function captureScreen(opts: CaptureOptions): Uint8Array {
   if (process.platform === "darwin") return captureMac(opts);
   throw new Error(`OS screenshot not supported on ${process.platform} (macOS only)`);
 }
@@ -71,24 +69,6 @@ export function listWindows(): WindowInfo[] {
     throw new Error(`could not parse window list from osascript: ${raw.slice(0, 200)}`);
   }
   return parsed;
-}
-
-// Resolve a CGWindowID from a match string. Prefers a window whose title (name)
-// contains the string, then one whose owner contains it. Lower window layers
-// (normal app windows are layer 0) win ties. Case-insensitive.
-export function resolveWindowId(match: string): number | undefined {
-  const needle = match.toLowerCase();
-  const wins = listWindows();
-  const byLayer = (a: WindowInfo, b: WindowInfo) => (a.layer ?? 0) - (b.layer ?? 0);
-  const byName = wins
-    .filter((w) => (w.name || "").toLowerCase().includes(needle))
-    .sort(byLayer);
-  if (byName.length) return byName[0].id;
-  const byOwner = wins
-    .filter((w) => (w.owner || "").toLowerCase().includes(needle))
-    .sort(byLayer);
-  if (byOwner.length) return byOwner[0].id;
-  return undefined;
 }
 
 export function uniqueWindowTitle(): string {
@@ -194,23 +174,8 @@ export function closeGhosttyProcess(pid: number): void {
 
 function captureMac(opts: CaptureOptions): Uint8Array {
   const tmp = join(tmpdir(), `termshot-${process.pid}-${Date.now()}.png`);
-  const args = ["screencapture", "-x"]; // -x: no capture sound
+  const args = ["screencapture", "-x", "-l", String(opts.windowId), "-o", tmp]; // -x: no capture sound; -l <id>: capture that window; -o: no window shadow
 
-  let id = opts.windowId;
-  if (id == null && opts.match) {
-    id = resolveWindowId(opts.match);
-    if (id == null) {
-      throw new Error(`no on-screen window matches "${opts.match}" (try: termshot --list)`);
-    }
-  }
-
-  if (id != null) {
-    args.push("-l", String(id), "-o"); // -l <id>: capture that window; -o: no window shadow
-  } else if (opts.window) {
-    args.push("-w"); // interactive window selection
-  }
-
-  args.push(tmp);
   const proc = Bun.spawnSync(args);
   if (!proc.success) {
     const err = new TextDecoder().decode(proc.stderr).trim();

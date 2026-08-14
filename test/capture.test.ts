@@ -1,18 +1,8 @@
 import { expect, test } from "bun:test";
 import { captureScreen, listWindows, uniqueWindowTitle, ghosttyLaunchArgs, wrappedCommand } from "../src/capture.ts";
 
-const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-
-test.skipIf(process.platform !== "darwin")("captureScreen returns a PNG on macOS", () => {
-  const png = captureScreen();
-  expect(png.length).toBeGreaterThan(1000);
-  for (let i = 0; i < PNG_MAGIC.length; i++) {
-    expect(png[i]).toBe(PNG_MAGIC[i]!);
-  }
-});
-
 test.skipIf(process.platform === "darwin")("captureScreen throws on unsupported platforms", () => {
-  expect(() => captureScreen()).toThrow(/not supported/);
+  expect(() => captureScreen({ windowId: 1 })).toThrow(/not supported/);
 });
 
 test.skipIf(process.platform !== "darwin")("listWindows returns id/owner/pid entries on macOS", () => {
@@ -23,12 +13,6 @@ test.skipIf(process.platform !== "darwin")("listWindows returns id/owner/pid ent
     expect(typeof w.owner).toBe("string");
     expect(typeof w.pid).toBe("number");
   }
-});
-
-test.skipIf(process.platform !== "darwin")("captureScreen throws when no window matches", () => {
-  expect(() => captureScreen({ match: "zzz-nonexistent-window-zzz-9182" })).toThrow(
-    /no on-screen window matches/,
-  );
 });
 
 test("uniqueWindowTitle looks like termshot-<pid>-<ms> and varies over time", () => {
