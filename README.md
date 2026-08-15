@@ -14,10 +14,23 @@ Use it to produce evidence images for pull requests, issues and docs, and to let
 
 ## Install
 
+With Homebrew:
+
+```sh
+brew install fayez-nazzal/tap/termshot-cap
+```
+
+The formula is called `termshot-cap` because Homebrew core already owns the name `termshot`. The installed command is still `termshot`, so it shadows nothing and reads the same everywhere.
+
+From source:
+
 ```sh
 bun install
+bun run build
 bun link
 ```
+
+`bin` points at `dist/termshot`, which is build output and is not committed. A fresh clone must run `bun run build` before `bun link`.
 
 `bun link` puts a global `termshot` command in `~/.bun/bin`. Add that folder to your `PATH`:
 

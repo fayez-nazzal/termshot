@@ -1,16 +1,19 @@
 {
   "name": "termshot",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Capture the screen to a PNG via the OS (macOS screencapture).",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "termshot": "src/cli.ts"
+    "termshot": "dist/termshot"
   },
   "files": [
-    "src"
+    "src",
+    "dist"
   ],
   "scripts": {
+    "build": "bun build --compile ./src/cli.ts --outfile dist/termshot",
+    "prepublishOnly": "bun run build",
     "test": "bun test"
   },
   "devDependencies": {
