@@ -1,5 +1,7 @@
 # termshot
 
+[![CI](https://github.com/fayez-nazzal/termshot/actions/workflows/ci.yml/badge.svg)](https://github.com/fayez-nazzal/termshot/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 `termshot` runs one command in a fresh Ghostty window on macOS, captures that window to a PNG, and prints a JSON record of the run on stdout.
 
 Use it to produce evidence images for pull requests, issues and docs, and to let an agent read the result without opening the image.
@@ -40,6 +42,51 @@ bun link
 echo 'export PATH="$HOME/.bun/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
+
+## Use it with your AI agent
+
+`termshot` is built to be driven by an AI coding agent. The bundled skill teaches your agent when to reach for `termshot` and how to call it.
+
+One command sets it up:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/fayez-nazzal/termshot/main/scripts/install-skill.sh | bash
+```
+
+It asks which agents to set up. It defaults to Claude Code.
+
+For scripts and CI, use the non-interactive form:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/fayez-nazzal/termshot/main/scripts/install-skill.sh | bash -s -- --agents claude -y
+```
+
+- `--agents` accepts `claude`, `codex`, `cursor`, `opencode`, `grok`, `antigravity` or `all`.
+- `--scope user` installs for every project instead of just this one.
+
+### Claude Code plugin
+
+Claude Code users can instead install the whole repo as a plugin:
+
+```sh
+/plugin marketplace add fayez-nazzal/termshot
+/plugin install termshot
+```
+
+### Supported agents
+
+Project scope paths:
+
+| Agent | Skill path |
+|---|---|
+| Claude Code | `.claude/skills/termshot/` |
+| OpenAI Codex CLI | `.agents/skills/termshot/` |
+| Cursor | `.cursor/skills/termshot/` |
+| opencode | `.opencode/skills/termshot/` |
+| xAI Grok CLI | `.grok/skills/termshot/` |
+| Google Antigravity | `.agents/skills/termshot/` |
+
+See `AGENTS.md` for the full recipes.
 
 ## Daily use
 
@@ -135,6 +182,10 @@ If you run a tiling window manager, it may force the window to a size you did no
 bun test
 bun run src/cli.ts --help
 ```
+
+## Contributing
+
+See `CONTRIBUTING.md`.
 
 ## License
 
