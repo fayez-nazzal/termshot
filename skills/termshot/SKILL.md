@@ -5,7 +5,7 @@ license: MIT
 compatibility: macOS only. Needs Ghostty at `/Applications/Ghostty.app` and Screen Recording permission for the calling terminal. Needs `termshot` on `PATH`.
 metadata:
   author: Fayez Nazzal
-  version: "0.6.0"
+  version: "0.6.1"
 ---
 
 # termshot

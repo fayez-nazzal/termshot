@@ -1,6 +1,6 @@
 {
   "name": "termshot",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "CLI tool for AI coding agents. Runs a command in a fresh Ghostty window, captures it to a PNG, and prints a JSON record with a sha256.",
   "keywords": [
     "ai-agents",
