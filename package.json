@@ -1,7 +1,25 @@
 {
   "name": "termshot",
-  "version": "0.5.2",
-  "description": "Capture the screen to a PNG via the OS (macOS screencapture).",
+  "version": "0.6.0",
+  "description": "CLI tool for AI coding agents. Runs a command in a fresh Ghostty window, captures it to a PNG, and prints a JSON record with a sha256.",
+  "keywords": [
+    "ai-agents",
+    "agent-tools",
+    "claude-code",
+    "codex",
+    "antigravity",
+    "grok-cli",
+    "cursor",
+    "opencode",
+    "agentic",
+    "cli",
+    "terminal",
+    "screenshot",
+    "ghostty",
+    "macos",
+    "screencapture",
+    "pr-evidence"
+  ],
   "license": "MIT",
   "type": "module",
   "bin": {

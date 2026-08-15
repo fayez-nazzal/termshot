@@ -4,6 +4,8 @@
 
 Use it to produce evidence images for pull requests, issues and docs, and to let an agent read the result without opening the image.
 
+`termshot` is built to be called by an AI coding agent. Every run prints one JSON line with `capture.path`, `capture.sha256` and a `status`, backed by the exit-code table below, so an agent can prove the PNG exists without ever loading the bytes. See `AGENTS.md` for the recipes and the traps.
+
 ## Requirements
 
 - macOS, for the built in `screencapture` tool.

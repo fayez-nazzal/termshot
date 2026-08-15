@@ -1,0 +1,14 @@
+{
+  "name": "termshot-marketplace",
+  "owner": {
+    "name": "Fayez Nazzal",
+    "url": "https://github.com/fayez-nazzal"
+  },
+  "plugins": [
+    {
+      "name": "termshot",
+      "source": "./",
+      "description": "CLI tool for AI coding agents. Runs a command in a fresh Ghostty window, captures it to a PNG, and prints a JSON record with a sha256."
+    }
+  ]
+}
