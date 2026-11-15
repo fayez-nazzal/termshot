@@ -29,3 +29,15 @@ test("carriage-return progress shows only the final state", async () => {
 test("a screen clear leaves only what came after it", async () => {
   expect((await render("old\r\n\x1b[2J\x1b[Hnew")).map(lineText).filter(Boolean)).toEqual(["new"]);
 });
+test("a screen clear after scrollback leaves only what came after it", async () => {
+  const out = Array.from({ length: 12 }, (_, i) => `l${i}`).join("\r\n");
+  expect((await render(`${out}\x1b[2J\x1b[Hnew`, 20, 5)).map(lineText)).toEqual(["new"]);
+});
+test("clearing scrollback with 3J leaves only the visible screen content", async () => {
+  const out = Array.from({ length: 12 }, (_, i) => `l${i}`).join("\r\n");
+  expect((await render(`${out}\x1b[3J`, 20, 5)).map(lineText)).toEqual(["l7", "l8", "l9", "l10", "l11"]);
+});
+test("2J followed by 3J still shows what comes after", async () => {
+  const out = Array.from({ length: 12 }, (_, i) => `l${i}`).join("\r\n");
+  expect((await render(`${out}\x1b[2J\x1b[3J\x1b[Hnew`, 20, 5)).map(lineText)).toEqual(["new"]);
+});

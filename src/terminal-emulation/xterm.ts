@@ -34,19 +34,28 @@ function isBlank(row: Row): boolean {
 export const xtermEmulator: TerminalEmulator = {
   async render(bytes, cols, rows) {
     const term = new Terminal({ cols, rows, scrollback: SCROLLBACK_LINES, allowProposedApi: true });
-    await new Promise<void>((resolve) => term.write(bytes, resolve));
-    const buffer = term.buffer.active;
     const lines: Row[] = [];
-    for (let y = 0; y < buffer.length; y++) {
-      const line = buffer.getLine(y);
-      const row: Row = [];
-      for (let x = 0; x < cols; x++) {
-        const cell = line?.getCell(x);
-        row.push(cell ? cellOf(cell) : cellOf(buffer.getNullCell()));
+    try {
+      // Lines above the last full-screen clear are not part of the final state.
+      let firstLine = 0;
+      term.parser.registerCsiHandler({ final: "J" }, (params) => {
+        if (params[0] === 2) firstLine = term.buffer.active.baseY;
+        else if (params[0] === 3) firstLine = 0;
+        return false;
+      });
+      await new Promise<void>((resolve) => term.write(bytes, resolve));
+      const buffer = term.buffer.active;
+      for (let y = firstLine; y < buffer.length; y++) {
+        const line = buffer.getLine(y);
+        const row: Row = [];
+        for (let x = 0; x < cols; x++) {
+          row.push(cellOf(line?.getCell(x) ?? buffer.getNullCell()));
+        }
+        lines.push(row);
       }
-      lines.push(row);
+    } finally {
+      term.dispose();
     }
-    term.dispose();
     while (lines.length > 0 && isBlank(lines[lines.length - 1]!)) lines.pop();
     return lines;
   },
