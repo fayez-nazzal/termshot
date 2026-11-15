@@ -18,7 +18,11 @@ export async function rasterize(svg: string, scale: number): Promise<Uint8Array>
     fitTo: { mode: "zoom", value: scale },
     font: { fontBuffers, loadSystemFonts: false, defaultFontFamily: FONT_FAMILY, monospaceFamily: FONT_FAMILY },
   });
-  const result = resvg.render().asPng();
-  resvg.free();
+  let result: Uint8Array;
+  try {
+    result = resvg.render().asPng();
+  } finally {
+    resvg.free();
+  }
   return result;
 }

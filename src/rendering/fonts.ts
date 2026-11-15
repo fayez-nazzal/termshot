@@ -5,6 +5,9 @@ import boldItalicPath from "../../assets/fonts/JetBrainsMono-BoldItalic.ttf" wit
 
 export const FONT_FAMILY = "JetBrains Mono";
 
+let buffers: Promise<Uint8Array[]> | undefined;
+
 export function loadFontBuffers(): Promise<Uint8Array[]> {
-  return Promise.all([regularPath, boldPath, italicPath, boldItalicPath].map((path) => Bun.file(path).bytes()));
+  buffers ??= Promise.all([regularPath, boldPath, italicPath, boldItalicPath].map((path) => Bun.file(path).bytes()));
+  return buffers;
 }
