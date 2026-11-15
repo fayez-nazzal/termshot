@@ -83,14 +83,14 @@ async function runInPty(request: RunRequest, signals: SignalPort): Promise<Comma
   const terminal = proc.terminal as Bun.Terminal;
 
   // Once the command is reaped its pid can be reused, so a late signal to
-  // termshot must not kill anything.
+  // termshot must not kill anything; the listeners are removed then too.
   let reaped = false;
   const dispose = idempotentDisposer(() => {
     if (!reaped) {
       signalCommand(proc, "SIGKILL");
     }
   });
-  registerSignalSafeDisposal(dispose, signals);
+  const unregister = registerSignalSafeDisposal(dispose, signals);
 
   // Echo off before sending end of input, so "^D" never reaches the output.
   // The command still sees a terminal on stdin, and anything reading it
@@ -108,6 +108,7 @@ async function runInPty(request: RunRequest, signals: SignalPort): Promise<Comma
     }
   }
   reaped = true;
+  unregister();
   await settlesWithin(ended, OUTPUT_DRAIN_MS);
   terminal.close();
 

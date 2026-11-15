@@ -1,15 +1,22 @@
+// Each registration returns a function that removes the listener again.
 export interface SignalPort {
-  onExit(handler: () => void): void;
-  onSignal(signal: NodeJS.Signals, handler: () => void): void;
+  onExit(handler: () => void): () => void;
+  onSignal(signal: NodeJS.Signals, handler: () => void): () => void;
 }
 
 export function processSignalPort(): SignalPort {
   return {
     onExit: (handler: () => void) => {
       process.on("exit", handler);
+      return () => {
+        process.off("exit", handler);
+      };
     },
     onSignal: (signal: NodeJS.Signals, handler: () => void) => {
       process.on(signal, handler);
+      return () => {
+        process.off(signal, handler);
+      };
     },
   };
 }
@@ -27,8 +34,13 @@ export function idempotentDisposer(kill: () => void): () => void {
   };
 }
 
-export function registerSignalSafeDisposal(dispose: () => void, signals: SignalPort): void {
-  signals.onExit(dispose);
-  signals.onSignal("SIGINT", dispose);
-  signals.onSignal("SIGTERM", dispose);
+// Returns a function that removes the listeners. Call it once the command is
+// reaped, so later signals get their default behavior back.
+export function registerSignalSafeDisposal(dispose: () => void, signals: SignalPort): () => void {
+  const removers = [signals.onExit(dispose), signals.onSignal("SIGINT", dispose), signals.onSignal("SIGTERM", dispose)];
+  return () => {
+    for (const remove of removers) {
+      remove();
+    }
+  };
 }

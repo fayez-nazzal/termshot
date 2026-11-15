@@ -152,6 +152,8 @@ test("missing shell is an environment error at step shell, nothing written", asy
   expect(result.status).toBe("environment-error");
   expect(result.errors).toEqual([{ step: "shell", message: "zsh was not found on PATH" }]);
   expect(result.terminal).toEqual({ shell: "zsh", cols: null, rows: null });
+  expect(result.command).toEqual({ argv: ["echo hi"], exitStatus: null, durationMs: null, timedOut: false });
+  expect(result.publish).toEqual({ requested: true, publisher: "gh", url: null, markdown: null, verified: false });
   expect(spies.requests).toEqual([]);
   expect(spies.artifacts.size).toBe(0);
 });
@@ -166,6 +168,7 @@ test("a runner that cannot start is an environment error at step command-run", a
 
   expect(result.status).toBe("environment-error");
   expect(result.errors).toEqual([{ step: "command-run", message: "posix_spawn failed" }]);
+  expect(result.command.argv).toEqual(["echo hi"]);
   expect(spies.artifacts.size).toBe(0);
 });
 
@@ -214,6 +217,7 @@ test("render failure is internal-error, no artifact, command status kept", async
   expect(exitCodeFor(result)).toBe(7);
   expect(result.errors).toEqual([{ step: "rendering", message: "rasterize failed" }]);
   expect(result.command).toEqual({ argv: ["echo hi"], exitStatus: 2, durationMs: 12, timedOut: false });
+  expect(result.terminal).toEqual({ shell: "zsh", cols: null, rows: null });
   expect(result.capture.path).toBeNull();
   expect(spies.artifacts.size).toBe(0);
 });
@@ -228,10 +232,10 @@ test("unwritable output is environment-error at step artifact", async () => {
   expect(result.status).toBe("environment-error");
   expect(exitCodeFor(result)).toBe(3);
   expect(result.errors).toEqual([{ step: "artifact", message: "EACCES: permission denied, mkdir '/fake'" }]);
+  expect(result.terminal).toEqual({ shell: "zsh", cols: 120, rows: 2 });
   expect(result.command.exitStatus).toBe(0);
   expect(result.capture.path).toBeNull();
-  expect(result.publish.requested).toBe(true);
-  expect(result.publish.verified).toBe(false);
+  expect(result.publish).toEqual({ requested: true, publisher: "gh", url: null, markdown: null, verified: false });
 });
 
 test("an unreadable PNG header is internal-error at step artifact, but a failed command wins", async () => {

@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import type { CommandRunResult } from "../src/command-run/command-runner.ts";
 import { commandEnv } from "../src/command-run/environment.ts";
 import { defaultCommandRunner } from "../src/command-run/registry.ts";
+import { ptyCommandRunner } from "../src/command-run/pty.ts";
+import type { SignalPort } from "../src/command-run/disposal.ts";
 import { COMMAND_RUN_SETTINGS } from "../src/command-run/settings.ts";
 
 const run = (cmd: string, timeoutMs = 60000) =>
@@ -45,4 +47,25 @@ test("cols and rows default to 120 by 30 and must be positive integers", () => {
   expect([COMMAND_RUN_SETTINGS.cols.default, COMMAND_RUN_SETTINGS.rows.default]).toEqual([120, 30]);
   expect(COMMAND_RUN_SETTINGS.cols.parse("80")).toBe(80);
   expect(() => COMMAND_RUN_SETTINGS.rows.parse(0)).toThrow();
+});
+
+test("the runner stops listening for signals once the command is reaped", async () => {
+  let listening = 0;
+  const signals: SignalPort = {
+    onExit: () => {
+      listening = listening + 1;
+      return () => {
+        listening = listening - 1;
+      };
+    },
+    onSignal: () => {
+      listening = listening + 1;
+      return () => {
+        listening = listening - 1;
+      };
+    },
+  };
+  const r = await ptyCommandRunner(signals).run({ argv: ["/bin/sh", "-c", "echo hi"], cols: 80, rows: 24, env: commandEnv(process.env, "xterm-256color", 80, 24), cwd: process.cwd(), timeoutMs: 60000 });
+  expect(r.exitStatus).toBe(0);
+  expect(listening).toBe(0);
 });

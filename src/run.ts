@@ -11,7 +11,7 @@ import type { PublisherId } from "./publishing/registry.ts";
 import type { Renderer } from "./rendering/renderer.ts";
 import { buildResult } from "./run-result/build.ts";
 import type { RunResultFacts } from "./run-result/build.ts";
-import type { CommandResult, RunError, RunResult, RunStatus, TerminalResult } from "./run-result/result.ts";
+import type { CommandResult, RunError, RunResult, RunStatus } from "./run-result/result.ts";
 import type { ShellId } from "./shell/registry.ts";
 import type { TerminalEmulator } from "./terminal-emulation/terminal-emulator.ts";
 import type { Theme } from "./theme/theme.ts";
@@ -79,14 +79,18 @@ async function attempt<T>(status: RunStatus, step: string, work: () => T | Promi
   return result;
 }
 
-// Every record names the configured shell and whether --publish was passed.
+// Every record names the command, the configured shell and, when --publish
+// was passed, the publisher.
 function record(setup: RunSetup, facts: Omit<RunResultFacts, "tool" | "version">): RunResult {
+  const { invocation, settings } = setup;
+  const requested = invocation.publishDest != null;
   return buildResult({
     ...facts,
     tool: TOOL,
     version: setup.version,
-    terminal: { ...facts.terminal, shell: setup.settings.shell },
-    publish: { requested: setup.invocation.publishDest != null, ...facts.publish },
+    command: { argv: [invocation.command], ...facts.command },
+    terminal: { ...facts.terminal, shell: settings.shell },
+    publish: { requested, publisher: requested ? settings.publisher : null, ...facts.publish },
   });
 }
 
@@ -94,10 +98,17 @@ function commandFacts(invocation: Invocation, run: CommandRunResult): CommandRes
   return { argv: [invocation.command], exitStatus: run.exitStatus, durationMs: run.durationMs, timedOut: run.timedOut };
 }
 
-// The grid is known once the frame is built, even when drawing it fails.
-type Drawing = { frame: Frame | null } & Attempt<Uint8Array>;
+// The grid of a rendered frame. Records where nothing was rendered leave it null.
+function grid(frame: Frame): { cols: number; rows: number } {
+  return { cols: frame.cols, rows: frame.rows.length };
+}
 
-async function draw(setup: RunSetup, ports: RunPorts, run: CommandRunResult): Promise<Drawing> {
+interface Drawing {
+  frame: Frame;
+  png: Uint8Array;
+}
+
+async function draw(setup: RunSetup, ports: RunPorts, run: CommandRunResult): Promise<Attempt<Drawing>> {
   const { invocation, settings, promptContext } = setup;
   const output = await attempt("internal-error", "terminal-emulation", () => ports.emulator.render(run.output, settings.cols, settings.rows));
   const frame = !output.ok
@@ -111,18 +122,19 @@ async function draw(setup: RunSetup, ports: RunPorts, run: CommandRunResult): Pr
           rows: settings.rows,
         }),
       );
-  const png = !frame.ok ? frame : await attempt("internal-error", "rendering", () => ports.renderer.render(frame.value, settings.theme, settings.fontSize));
-  return { ...png, frame: frame.ok ? frame.value : null };
+  return !frame.ok
+    ? frame
+    : await attempt("internal-error", "rendering", async () => ({ frame: frame.value, png: await ports.renderer.render(frame.value, settings.theme, settings.fontSize) }));
 }
 
 // Reads the written PNG back and publishes it when asked.
-function finish(setup: RunSetup, ports: RunPorts, command: CommandResult, terminal: Partial<TerminalResult>, png: Uint8Array, artifact: ArtifactRecord): RunResult {
+function finish(setup: RunSetup, ports: RunPorts, command: CommandResult, drawing: Drawing, artifact: ArtifactRecord): RunResult {
   const { invocation } = setup;
   const errors: RunError[] = [];
   let width: number | null = null;
   let height: number | null = null;
   try {
-    const header = pngHeader(png);
+    const header = pngHeader(drawing.png);
     width = header.width;
     height = header.height;
   } catch (e) {
@@ -136,12 +148,10 @@ function finish(setup: RunSetup, ports: RunPorts, command: CommandResult, termin
     status = "internal-error";
   }
 
-  let publisher: string | null = null;
   let publishUrl: string | null = null;
   let publishMarkdown: string | null = null;
   let publishVerified = false;
   if (invocation.publishDest != null) {
-    publisher = setup.settings.publisher;
     const label = invocation.publishLabel ?? artifact.path;
     try {
       const published = ports.publisher.publish({ filePath: artifact.path, sha256: artifact.sha256, dest: invocation.publishDest, size: invocation.publishSize, label });
@@ -158,8 +168,8 @@ function finish(setup: RunSetup, ports: RunPorts, command: CommandResult, termin
     status,
     command,
     capture: { path: artifact.path, bytes: artifact.bytes, sha256: artifact.sha256, width, height },
-    terminal,
-    publish: { publisher, url: publishUrl, markdown: publishMarkdown, verified: publishVerified },
+    terminal: grid(drawing.frame),
+    publish: { url: publishUrl, markdown: publishMarkdown, verified: publishVerified },
     errors,
   });
 }
@@ -167,17 +177,16 @@ function finish(setup: RunSetup, ports: RunPorts, command: CommandResult, termin
 async function capture(setup: RunSetup, ports: RunPorts, run: CommandRunResult): Promise<RunResult> {
   const command = commandFacts(setup.invocation, run);
   const drawing = await draw(setup, ports, run);
-  const terminal = drawing.frame == null ? {} : { cols: drawing.frame.cols, rows: drawing.frame.rows.length };
   let result: RunResult;
   if (!drawing.ok) {
-    result = record(setup, { status: drawing.status, command, terminal, errors: [drawing.error] });
+    result = record(setup, { status: drawing.status, command, errors: [drawing.error] });
   } else {
-    const png = drawing.value;
-    const artifact = await attempt("environment-error", "artifact", () => ports.artifacts.write(setup.outputPath, png));
+    const drawn = drawing.value;
+    const artifact = await attempt("environment-error", "artifact", () => ports.artifacts.write(setup.outputPath, drawn.png));
     if (!artifact.ok) {
-      result = record(setup, { status: artifact.status, command, terminal, errors: [artifact.error] });
+      result = record(setup, { status: artifact.status, command, terminal: grid(drawn.frame), errors: [artifact.error] });
     } else {
-      result = finish(setup, ports, command, terminal, png, artifact.value);
+      result = finish(setup, ports, command, drawn, artifact.value);
     }
   }
   return result;

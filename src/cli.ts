@@ -16,7 +16,8 @@ import { parseFlags } from "./invocation/flags.ts";
 import { helpText } from "./invocation/help.ts";
 import type { Invocation } from "./invocation/invocation.ts";
 import { readGitBranch, liveGitRunner } from "./prompt/context.ts";
-import type { PromptContext } from "./prompt/prompt.ts";
+import type { GitRunner } from "./prompt/context.ts";
+import type { PromptContext, PromptOptions } from "./prompt/prompt.ts";
 import { defaultPrompt } from "./prompt/registry.ts";
 import { publisherFor } from "./publishing/registry.ts";
 import type { Publisher } from "./publishing/publisher.ts";
@@ -43,7 +44,9 @@ function timestamp(): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-function livePorts(shell: ShellId, publisher: Publisher): RunPorts {
+// projectRoot is set when the capture goes to the project's default folder:
+// .termshot/ is made only then, and only once there is an image to write.
+function livePorts(shell: ShellId, publisher: Publisher, projectRoot: string | null): RunPorts {
   return {
     shell: { argv: (command) => resolveShellArgv(shell, command, Bun.which) },
     runner: defaultCommandRunner(),
@@ -51,7 +54,14 @@ function livePorts(shell: ShellId, publisher: Publisher): RunPorts {
     prompt: defaultPrompt(),
     highlighter: defaultHighlighter(),
     renderer: defaultRenderer(),
-    artifacts: { write: writeArtifact },
+    artifacts: {
+      write: (path, data) => {
+        if (projectRoot != null) {
+          ensureTermshotDir(projectRoot);
+        }
+        return writeArtifact(path, data);
+      },
+    },
     publisher: { publish: (request) => publisher.publish(request) },
   };
 }
@@ -74,23 +84,9 @@ export function captureSettings(config: Config, invocation: Invocation): Capture
   };
 }
 
-function promptContext(cwd: string, settings: CaptureSettings): PromptContext {
-  return { cwd, home: homedir(), gitBranch: settings.prompt.git ? readGitBranch(cwd, liveGitRunner) : null };
-}
-
-// -o wins. Otherwise captures go in the project's .termshot/captures/, or in
-// ~/termshot/ outside any project, where nothing is created in cwd.
-function outputPathFor(invocation: Invocation, root: string | null): string {
-  let result = invocation.output;
-  if (result == null && root != null) {
-    try {
-      ensureTermshotDir(root);
-    } catch (e) {
-      fail("environment-error", "artifact", (e as Error).message);
-    }
-  }
-  result ??= defaultCapturePath(root, homedir(), timestamp());
-  return result;
+// git runs only when the prompt is drawn with the branch in it.
+export function promptContext(cwd: string, home: string, options: PromptOptions, git: GitRunner): PromptContext {
+  return { cwd, home, gitBranch: options.show && options.git ? readGitBranch(cwd, git) : null };
 }
 
 function fail(status: RunStatus, step: string, message: string): never {
@@ -170,17 +166,21 @@ async function runCapture(argv: string[]): Promise<void> {
         fail("usage-error", "flags", problem);
       }
     }
+    // -o wins. Otherwise captures go in the project's .termshot/captures/, or
+    // in ~/termshot/ outside any project, where nothing is created in cwd.
+    const defaultFolderRoot = invocation.output == null ? root : null;
+    const outputPath = invocation.output ?? defaultCapturePath(root, homedir(), timestamp());
     const result = await runTermshot(
       {
         version: VERSION,
         invocation,
         settings,
-        promptContext: promptContext(cwd, settings),
+        promptContext: promptContext(cwd, homedir(), settings.prompt, liveGitRunner),
         env: commandEnv(process.env, EMULATOR_TERM_NAME, settings.cols, settings.rows),
         cwd,
-        outputPath: outputPathFor(invocation, root),
+        outputPath,
       },
-      livePorts(settings.shell, publisher),
+      livePorts(settings.shell, publisher, defaultFolderRoot),
     );
     emit(result);
     process.exit(exitCodeFor(result));
