@@ -28,6 +28,7 @@
   },
   "files": [
     "src",
+    "assets",
     "dist"
   ],
   "scripts": {
@@ -37,5 +38,9 @@
   },
   "devDependencies": {
     "@types/bun": "latest"
+  },
+  "dependencies": {
+    "@resvg/resvg-wasm": "2.6.2",
+    "@xterm/headless": "6.0.0"
   }
 }
