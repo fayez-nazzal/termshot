@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { VERSION } from "../src/cli.ts";
-import { CONFIG_KEY_NAMES } from "../src/configuration/config.ts";
+import { VERSION, captureSettings } from "../src/cli.ts";
+import { CONFIG_KEY_NAMES, effectiveConfig } from "../src/configuration/config.ts";
 import { parseFlags } from "../src/invocation/flags.ts";
 import { helpText } from "../src/invocation/help.ts";
 import { buildResult } from "../src/run-result/build.ts";
+import { themeFor } from "../src/theme/registry.ts";
 
 const REMOVED_FLAGS = ["--annotate", "--copy", "--window-pick", "--box", "--marker", "--list", "--window", "--stdout", "--terminal", "--settle"];
 
@@ -64,4 +65,20 @@ test("VERSION comes from package.json", () => {
   const raw = readFileSync(join(import.meta.dir, "..", "package.json"), "utf8");
   const declared = JSON.parse(raw).version;
   expect(VERSION).toBe(declared);
+});
+
+test("--cols, --rows and --publisher beat the config, which fills in what the flags leave out", () => {
+  const config = effectiveConfig({ cols: 50, rows: 10, publisher: "rclone", theme: "light", "font.size": 22, "prompt.symbol": "$" });
+  const both = parseFlags(["--run", "x", "--cols", "80", "--rows", "12", "--publish", "7", "--publisher", "gh"]);
+  const neither = parseFlags(["--run", "x"]);
+  if (!both.ok || !neither.ok) throw new Error("flags did not parse");
+
+  const flagged = captureSettings(config, both.invocation);
+  expect([flagged.cols, flagged.rows, flagged.publisher]).toEqual([80, 12, "gh"]);
+
+  const configured = captureSettings(config, neither.invocation);
+  expect([configured.cols, configured.rows, configured.publisher]).toEqual([50, 10, "rclone"]);
+  expect(configured.theme).toBe(themeFor("light"));
+  expect(configured.fontSize).toBe(22);
+  expect(configured.prompt).toEqual({ show: true, directory: "full", git: true, symbol: "$" });
 });

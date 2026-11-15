@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { PUBLISHER_IDS, publisherFor } from "../src/publishing/registry.ts";
-import { TERMINAL_IDS, terminalEmulator } from "../src/terminal-emulator/registry.ts";
+import { SHELL_IDS } from "../src/shell/registry.ts";
 
 const SRC = join(import.meta.dir, "..", "src");
 
@@ -34,9 +34,16 @@ function offenders(owner: string, names: string[]): string[] {
 
 // Each adapter set is the single source of truth for its vendors. No other
 // source file may name one.
-test("no source file outside src/terminal-emulator/ names a specific terminal", () => {
-  const names = TERMINAL_IDS.flatMap((id) => [id, terminalEmulator(id).displayName]);
-  expect(offenders("terminal-emulator", names)).toEqual([]);
+test("no source file outside src/shell/ names a specific shell", () => {
+  expect(offenders("shell", SHELL_IDS)).toEqual([]);
+});
+
+test("no source file outside src/terminal-emulation/ names the emulator library", () => {
+  expect(offenders("terminal-emulation", ["xterm"])).toEqual([]);
+});
+
+test("no source file outside src/rendering/ names the rasterizer or the font", () => {
+  expect(offenders("rendering", ["resvg", "JetBrains", "JetBrainsMono"])).toEqual([]);
 });
 
 test("no source file outside src/publishing/ names a specific publisher", () => {

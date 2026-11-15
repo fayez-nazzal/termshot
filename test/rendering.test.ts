@@ -6,7 +6,7 @@ import { RENDERING_SETTINGS } from "../src/rendering/settings.ts";
 import { frameToSvg } from "../src/rendering/svg-frame.ts";
 import type { Frame, FrameCell } from "../src/frame/frame.ts";
 import { themeFor } from "../src/theme/registry.ts";
-import { pngHeader } from "../src/screen-capture/png-header.ts";
+import { pngHeader } from "../src/artifact/png-header.ts";
 
 test("rasterize turns an SVG with text into a 2x PNG", async () => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40"><text x="4" y="24" font-family="${FONT_FAMILY}" font-size="18">hi</text></svg>`;

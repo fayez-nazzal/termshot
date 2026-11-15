@@ -1,30 +1,36 @@
 #!/usr/bin/env bun
 
-import { existsSync, readFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { effectiveConfig, setConfigValue, unsetConfigValue } from "./configuration/config.ts";
 import type { Config, StoredConfig } from "./configuration/config.ts";
 import { readStoredConfig, writeStoredConfig } from "./configuration/config-store.ts";
-import { configPathFor, ensureTermshotDir, findProjectRoot, liveProjectProbe } from "./configuration/project.ts";
-import { processSignalPort, launchSession, terminateProcess, uniqueWindowTitle } from "./terminal-session/session.ts";
-import { waitForWindow } from "./terminal-session/window-lookup.ts";
-import { captureWindow } from "./screen-capture/screen-capture.ts";
-import { writeArtifact } from "./screen-capture/artifact.ts";
+import { configPathFor, defaultCapturePath, ensureTermshotDir, findProjectRoot, liveProjectProbe } from "./configuration/project.ts";
+import { writeArtifact } from "./artifact/artifact.ts";
+import { defaultCommandRunner } from "./command-run/registry.ts";
+import { commandEnv } from "./command-run/environment.ts";
+import { defaultHighlighter } from "./highlighting/registry.ts";
 import { parseConfigCommand } from "./invocation/config-command.ts";
 import type { ConfigCommand } from "./invocation/config-command.ts";
 import { parseFlags } from "./invocation/flags.ts";
 import { helpText } from "./invocation/help.ts";
+import type { Invocation } from "./invocation/invocation.ts";
+import { readGitBranch, liveGitRunner } from "./prompt/context.ts";
+import type { PromptContext } from "./prompt/prompt.ts";
+import { defaultPrompt } from "./prompt/registry.ts";
+import { publisherFor } from "./publishing/registry.ts";
+import type { Publisher } from "./publishing/publisher.ts";
+import { defaultRenderer } from "./rendering/registry.ts";
 import { buildResult } from "./run-result/build.ts";
 import { emit } from "./run-result/emit.ts";
 import { exitCodeFor } from "./run-result/exit-codes.ts";
 import type { RunStatus } from "./run-result/result.ts";
-import { publisherFor } from "./publishing/registry.ts";
-import type { Publisher } from "./publishing/publisher.ts";
-import { DEFAULT_TERMINAL_ID, terminalEmulator } from "./terminal-emulator/registry.ts";
-import type { TerminalEmulator } from "./terminal-emulator/terminal-emulator.ts";
+import { resolveShellArgv } from "./shell/registry.ts";
+import type { ShellId } from "./shell/registry.ts";
+import { defaultEmulator, EMULATOR_TERM_NAME } from "./terminal-emulation/registry.ts";
+import { themeFor } from "./theme/registry.ts";
 import { runTermshot } from "./run.ts";
-import type { RunPorts } from "./run.ts";
+import type { CaptureSettings, RunPorts } from "./run.ts";
 import packageJson from "../package.json";
 
 export const VERSION = packageJson.version;
@@ -37,59 +43,54 @@ function timestamp(): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-function defaultOutputPath(): string {
-  return join(homedir(), "termshot", `${timestamp()}.png`);
-}
-
-function readStatusFile(path: string): string {
-  let result = "";
-  try {
-    result = readFileSync(path, "utf8");
-  } catch {
-    result = "";
-  }
-  return result;
-}
-
-function buildLivePorts(emulator: TerminalEmulator, publisher: Publisher): RunPorts {
-  const sessionDisposers = new Map<number, () => void>();
-  const signals = processSignalPort();
+function livePorts(shell: ShellId, publisher: Publisher): RunPorts {
   return {
-    session: {
-      launch: (spec) => {
-        const session = launchSession(emulator, spec, signals);
-        sessionDisposers.set(session.pid, session.dispose);
-        return session.pid;
-      },
-      dispose: (pid: number) => {
-        const dispose = sessionDisposers.get(pid);
-        if (dispose != null) {
-          dispose();
-        } else {
-          terminateProcess(pid);
-        }
-      },
-    },
-    windows: {
-      waitForWindow,
-    },
-    capture: {
-      grab: captureWindow,
-    },
-    artifacts: {
-      write: writeArtifact,
-    },
-    statusStore: {
-      read: readStatusFile,
-    },
-    clock: {
-      now: () => Date.now(),
-      sleep: (ms: number) => Bun.sleepSync(ms),
-    },
-    publisher: {
-      publish: (request) => publisher.publish(request),
-    },
+    shell: { argv: (command) => resolveShellArgv(shell, command, Bun.which) },
+    runner: defaultCommandRunner(),
+    emulator: defaultEmulator(),
+    prompt: defaultPrompt(),
+    highlighter: defaultHighlighter(),
+    renderer: defaultRenderer(),
+    artifacts: { write: writeArtifact },
+    publisher: { publish: (request) => publisher.publish(request) },
   };
+}
+
+// Flags beat the config file; the config already holds the defaults.
+export function captureSettings(config: Config, invocation: Invocation): CaptureSettings {
+  return {
+    shell: config.shell,
+    theme: themeFor(config.theme),
+    fontSize: config["font.size"],
+    cols: invocation.cols ?? config.cols,
+    rows: invocation.rows ?? config.rows,
+    prompt: {
+      show: config["prompt.show"],
+      directory: config["prompt.directory"],
+      git: config["prompt.git"],
+      symbol: config["prompt.symbol"],
+    },
+    publisher: invocation.publisher ?? config.publisher,
+  };
+}
+
+function promptContext(cwd: string, settings: CaptureSettings): PromptContext {
+  return { cwd, home: homedir(), gitBranch: settings.prompt.git ? readGitBranch(cwd, liveGitRunner) : null };
+}
+
+// -o wins. Otherwise captures go in the project's .termshot/captures/, or in
+// ~/termshot/ outside any project, where nothing is created in cwd.
+function outputPathFor(invocation: Invocation, root: string | null): string {
+  let result = invocation.output;
+  if (result == null && root != null) {
+    try {
+      ensureTermshotDir(root);
+    } catch (e) {
+      fail("environment-error", "artifact", (e as Error).message);
+    }
+  }
+  result ??= defaultCapturePath(root, homedir(), timestamp());
+  return result;
 }
 
 function fail(status: RunStatus, step: string, message: string): never {
@@ -148,7 +149,7 @@ function runConfig(args: string[]): void {
   process.stdout.write(`${JSON.stringify({ tool: TOOL, version: VERSION, configPath: path, config })}\n`);
 }
 
-function runCapture(argv: string[]): void {
+async function runCapture(argv: string[]): Promise<void> {
   const flags = parseFlags(argv);
   if (!flags.ok) {
     fail("usage-error", "flags", flags.message);
@@ -157,39 +158,44 @@ function runCapture(argv: string[]): void {
   } else if (flags.version) {
     process.stdout.write(`${VERSION}\n`);
   } else {
-    const root = findProjectRoot(process.cwd(), liveProjectProbe);
+    const { invocation } = flags;
+    const cwd = process.cwd();
+    const root = findProjectRoot(cwd, liveProjectProbe);
     const config = effectiveConfig(root != null ? loadStoredConfig(configPathFor(root)) : {});
-    // Temporary until the headless runner replaces this path: the terminal
-    // config key and flag are gone, so the old path uses the default emulator.
-    const terminal = DEFAULT_TERMINAL_ID;
-    // Temporary until the headless runner replaces this path
-    const invocation = { ...flags.invocation, cols: flags.invocation.cols ?? config.cols, rows: flags.invocation.rows ?? config.rows };
-    const publisherId = flags.invocation.publisher ?? config.publisher;
-    const publisher = publisherFor(publisherId);
-    if (flags.invocation.publishDest != null) {
-      const problem = publisher.destinationProblem(flags.invocation.publishDest);
+    const settings = captureSettings(config, invocation);
+    const publisher = publisherFor(settings.publisher);
+    if (invocation.publishDest != null) {
+      const problem = publisher.destinationProblem(invocation.publishDest);
       if (problem != null) {
         fail("usage-error", "flags", problem);
       }
     }
-    const outputPath = flags.invocation.output ?? defaultOutputPath();
-    const title = uniqueWindowTitle();
-    const statusPath = join(tmpdir(), `${title}.status`);
-    const result = runTermshot({ version: VERSION, invocation, terminal, publisher: publisherId, outputPath, statusPath, title }, buildLivePorts(terminalEmulator(terminal), publisher));
+    const result = await runTermshot(
+      {
+        version: VERSION,
+        invocation,
+        settings,
+        promptContext: promptContext(cwd, settings),
+        env: commandEnv(process.env, EMULATOR_TERM_NAME, settings.cols, settings.rows),
+        cwd,
+        outputPath: outputPathFor(invocation, root),
+      },
+      livePorts(settings.shell, publisher),
+    );
     emit(result);
     process.exit(exitCodeFor(result));
   }
 }
 
-function main() {
+async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   if (argv[0] === "config") {
     runConfig(argv.slice(1));
   } else {
-    runCapture(argv);
+    await runCapture(argv);
   }
 }
 
 if (import.meta.main) {
-  main();
+  await main();
 }
