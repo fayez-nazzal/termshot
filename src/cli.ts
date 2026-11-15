@@ -28,7 +28,6 @@ import type { RunPorts } from "./run.ts";
 import packageJson from "../package.json";
 
 export const VERSION = packageJson.version;
-export { DEFAULT_RUN_COLS, DEFAULT_RUN_ROWS } from "./invocation/flags.ts";
 
 const TOOL = "termshot";
 
@@ -161,8 +160,10 @@ function runCapture(argv: string[]): void {
     const root = findProjectRoot(process.cwd(), liveProjectProbe);
     const config = effectiveConfig(root != null ? loadStoredConfig(configPathFor(root)) : {});
     // Temporary until the headless runner replaces this path: the terminal
-    // config key is gone, so only --terminal picks a non-default emulator.
-    const terminal = flags.invocation.terminal ?? DEFAULT_TERMINAL_ID;
+    // config key and flag are gone, so the old path uses the default emulator.
+    const terminal = DEFAULT_TERMINAL_ID;
+    // Temporary until the headless runner replaces this path
+    const invocation = { ...flags.invocation, cols: flags.invocation.cols ?? config.cols, rows: flags.invocation.rows ?? config.rows };
     const publisherId = flags.invocation.publisher ?? config.publisher;
     const publisher = publisherFor(publisherId);
     if (flags.invocation.publishDest != null) {
@@ -174,7 +175,7 @@ function runCapture(argv: string[]): void {
     const outputPath = flags.invocation.output ?? defaultOutputPath();
     const title = uniqueWindowTitle();
     const statusPath = join(tmpdir(), `${title}.status`);
-    const result = runTermshot({ version: VERSION, invocation: flags.invocation, terminal, publisher: publisherId, outputPath, statusPath, title }, buildLivePorts(terminalEmulator(terminal), publisher));
+    const result = runTermshot({ version: VERSION, invocation, terminal, publisher: publisherId, outputPath, statusPath, title }, buildLivePorts(terminalEmulator(terminal), publisher));
     emit(result);
     process.exit(exitCodeFor(result));
   }

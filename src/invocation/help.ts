@@ -1,8 +1,6 @@
 import { CONFIG_KEY_NAMES, SETTINGS } from "../configuration/config.ts";
 import { DEFAULT_EMBED_WIDTH } from "../publishing/publisher.ts";
 import { PUBLISHER_IDS, publisherFor } from "../publishing/registry.ts";
-import { TERMINAL_IDS } from "../terminal-emulator/registry.ts";
-import { DEFAULT_RUN_COLS, DEFAULT_RUN_ROWS } from "./flags.ts";
 
 function configKeyLines(): string {
   return CONFIG_KEY_NAMES.map((key) => `  ${key.padEnd(22)}${SETTINGS[key].description} (default: ${SETTINGS[key].default})`).join("\n");
@@ -17,24 +15,21 @@ function resizingPublishers(): string {
 }
 
 export function helpText(version: string): string {
-  return `termshot ${version} — run a command in a fresh terminal window and capture it
+  return `termshot ${version} — run a command in a built-in headless terminal and render it to a PNG
 
 USAGE
   termshot --run <command> [options]
   termshot config [set <key> <value> | unset <key>]
 
-  Runs the command in a new window of the configured terminal and captures
-  that window via the OS (macOS: screencapture).
+  Runs the command in a built-in headless terminal and renders it to a PNG.
+  No terminal app or screen capture permission is involved.
 
 OPTIONS
-      --run <command>     Run the command in a new terminal window and capture it
-  -o, --output <path>     Output PNG path (default: ~/termshot/<timestamp>.png)
-      --terminal <name>   Terminal for this run only, overriding the config
-                          (${TERMINAL_IDS.join(", ")})
-      --settle <ms>       Wait after the window appears before
-                          capturing (default: 500)
-      --cols <n>          --run window width in terminal columns (default: ${DEFAULT_RUN_COLS})
-      --rows <n>          --run window height in terminal rows (default: ${DEFAULT_RUN_ROWS})
+      --run <command>     Run the command and render its output
+  -o, --output <path>     Output PNG path (default: .termshot/captures/<timestamp>.png
+                          in a project, else ~/termshot/<timestamp>.png)
+      --cols <n>          Terminal width in columns (default: ${SETTINGS.cols.default})
+      --rows <n>          Most terminal rows shown (default: ${SETTINGS.rows.default})
       --publish <dest>    Upload the written PNG and put a Markdown
                           image embed in the record. <dest> depends on the
                           configured publisher:
@@ -52,7 +47,7 @@ CONFIG
   termshot config set <key> <value>   Save a value
   termshot config unset <key>         Revert a key to its default
 
-  Stored in $XDG_CONFIG_HOME/termshot/config.json (default ~/.config/termshot/).
+  Stored in .termshot/config.json at the project root.
 
 KEYS
 ${configKeyLines()}

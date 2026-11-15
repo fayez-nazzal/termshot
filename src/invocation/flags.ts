@@ -1,13 +1,9 @@
 import { parseArgs } from "node:util";
 import { DEFAULT_EMBED_WIDTH } from "../publishing/publisher.ts";
 import { parsePublisherId } from "../publishing/registry.ts";
-import { parseTerminalId } from "../terminal-emulator/registry.ts";
 import type { Invocation } from "./invocation.ts";
 
-export const DEFAULT_RUN_COLS = 120;
-export const DEFAULT_RUN_ROWS = 30;
-
-const REMOVED_FLAGS = ["annotate", "copy", "window-pick", "box", "marker", "list", "window", "stdout"];
+const REMOVED_FLAGS = ["annotate", "copy", "window-pick", "box", "marker", "list", "window", "stdout", "terminal", "settle"];
 
 export type FlagsResult = { ok: true; invocation: Invocation; help: boolean; version: boolean } | { ok: false; message: string };
 
@@ -36,14 +32,12 @@ function parseArgv(argv: string[]) {
     options: {
       output: { type: "string", short: "o" },
       run: { type: "string" },
-      settle: { type: "string" },
       cols: { type: "string" },
       rows: { type: "string" },
       publish: { type: "string" },
       "publish-size": { type: "string" },
       "publish-label": { type: "string" },
       publisher: { type: "string" },
-      terminal: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false },
     },
@@ -64,7 +58,7 @@ export function parseFlags(argv: string[]): FlagsResult {
           ok: true,
           help: Boolean(values.help),
           version: Boolean(values.version),
-          invocation: { command: "", output: null, settleMs: 500, cols: DEFAULT_RUN_COLS, rows: DEFAULT_RUN_ROWS, publishDest: null, publishSize: DEFAULT_EMBED_WIDTH, publishLabel: null, publisher: null, terminal: null },
+          invocation: { command: "", output: null, cols: null, rows: null, publishDest: null, publishSize: DEFAULT_EMBED_WIDTH, publishLabel: null, publisher: null },
         };
       } else if (values.run == null) {
         result = { ok: false, message: "--run <command> is required" };
@@ -74,14 +68,12 @@ export function parseFlags(argv: string[]): FlagsResult {
         const invocation: Invocation = {
           command: values.run,
           output: values.output ?? null,
-          settleMs: values.settle != null ? intFlag("settle", values.settle) : 500,
-          cols: values.cols != null ? intFlag("cols", values.cols) : DEFAULT_RUN_COLS,
-          rows: values.rows != null ? intFlag("rows", values.rows) : DEFAULT_RUN_ROWS,
+          cols: values.cols != null ? intFlag("cols", values.cols) : null,
+          rows: values.rows != null ? intFlag("rows", values.rows) : null,
           publishDest: values.publish ?? null,
           publishSize: values["publish-size"] != null ? intFlag("publish-size", values["publish-size"]) : DEFAULT_EMBED_WIDTH,
           publishLabel: values["publish-label"] ?? null,
           publisher: values.publisher != null ? parsePublisherId(values.publisher) : null,
-          terminal: values.terminal != null ? parseTerminalId(values.terminal) : null,
         };
         result = { ok: true, help: false, version: false, invocation };
       }

@@ -16,7 +16,7 @@ export interface CaptureResult {
 }
 
 export interface TerminalResult {
-  emulator: string | null;
+  shell: string | null;
   cols: number | null;
   rows: number | null;
 }

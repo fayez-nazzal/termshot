@@ -154,7 +154,7 @@ test("a capture with a malformed --publish dest fails as a usage error before an
   expect(run.exitCode).toBe(2);
   const record = JSON.parse(run.stdout);
   expect(record.errors[0]).toEqual({ step: "flags", message: expect.stringContaining("remote:path") });
-  expect(record.terminal.emulator).toBeNull();
+  expect(record.terminal.shell).toBeNull();
 });
 
 test("termshot config set with a bad value is a usage error and writes nothing", () => {

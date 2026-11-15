@@ -3,7 +3,7 @@ import type { CaptureResult, CommandResult, PublishResult, RunError, RunResult, 
 
 const EMPTY_COMMAND: CommandResult = { argv: [], exitStatus: null, durationMs: null, timedOut: false };
 const EMPTY_CAPTURE: CaptureResult = { path: null, bytes: null, width: null, height: null, sha256: null };
-const EMPTY_TERMINAL: TerminalResult = { emulator: null, cols: null, rows: null };
+const EMPTY_TERMINAL: TerminalResult = { shell: null, cols: null, rows: null };
 const EMPTY_PUBLISH: PublishResult = { requested: false, publisher: null, url: null, markdown: null, verified: false };
 
 export interface RunResultFacts {

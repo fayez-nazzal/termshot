@@ -8,6 +8,7 @@ import type { Invocation } from "./invocation/invocation.ts";
 import type { RunError, RunResult, RunStatus } from "./run-result/result.ts";
 import type { PublishedImage, PublishRequest } from "./publishing/publisher.ts";
 import type { PublisherId } from "./publishing/registry.ts";
+import { COMMAND_RUN_SETTINGS } from "./command-run/settings.ts";
 import type { LaunchSpec } from "./terminal-emulator/terminal-emulator.ts";
 import type { TerminalId } from "./terminal-emulator/registry.ts";
 
@@ -55,20 +56,25 @@ export interface RunSetup {
 const TOOL = "termshot";
 const WINDOW_TIMEOUT_MS = 15000;
 const COMMAND_TIMEOUT_MS = 60000;
+// Temporary until the headless runner replaces this path
+const SETTLE_MS = 500;
 
 function failure(setup: RunSetup, status: RunStatus, step: string, message: string): RunResult {
   const errors: RunError[] = [{ step, message }];
-  return buildResult({ tool: TOOL, version: setup.version, status, terminal: { emulator: setup.terminal }, errors });
+  return buildResult({ tool: TOOL, version: setup.version, status, terminal: { shell: null }, errors });
 }
 
 export function runTermshot(setup: RunSetup, ports: RunPorts): RunResult {
   const { version, invocation, outputPath, statusPath, title } = setup;
   let result: RunResult;
+  // Temporary until the headless runner replaces this path
+  const cols = invocation.cols ?? COMMAND_RUN_SETTINGS.cols.default;
+  const rows = invocation.rows ?? COMMAND_RUN_SETTINGS.rows.default;
   const plan = buildRunPlan(invocation, statusPath);
 
   let pid: number;
   try {
-    pid = ports.session.launch({ title, script: plan.innerScriptText, cols: invocation.cols, rows: invocation.rows });
+    pid = ports.session.launch({ title, script: plan.innerScriptText, cols, rows });
   } catch (e) {
     result = failure(setup, "environment-error", "terminal-session", (e as Error).message);
     return result;
@@ -83,7 +89,7 @@ export function runTermshot(setup: RunSetup, ports: RunPorts): RunResult {
     return result;
   }
 
-  ports.clock.sleep(invocation.settleMs);
+  ports.clock.sleep(SETTLE_MS);
 
   const commandRun = runCommand(plan, ports.statusStore, ports.clock, COMMAND_TIMEOUT_MS);
   if (commandRun.timedOut) {
@@ -92,7 +98,7 @@ export function runTermshot(setup: RunSetup, ports: RunPorts): RunResult {
       tool: TOOL,
       version,
       status: "timeout",
-      terminal: { emulator: setup.terminal },
+      terminal: { shell: null },
       command: { argv: [invocation.command], exitStatus: null, durationMs: commandRun.durationMs, timedOut: true },
       errors: [{ step: "command-run", message: `command did not finish within ${COMMAND_TIMEOUT_MS}ms` }],
     });
@@ -153,7 +159,7 @@ export function runTermshot(setup: RunSetup, ports: RunPorts): RunResult {
     status,
     command: { argv: [invocation.command], exitStatus: commandRun.exitStatus, durationMs: commandRun.durationMs, timedOut: false },
     capture: { path: artifact.path, bytes: artifact.bytes, sha256: artifact.sha256, width, height },
-    terminal: { emulator: setup.terminal, cols: invocation.cols, rows: invocation.rows },
+    terminal: { shell: null, cols, rows },
     publish: { requested: invocation.publishDest != null, publisher, url: publishUrl, markdown: publishMarkdown, verified: publishVerified },
     errors,
   });

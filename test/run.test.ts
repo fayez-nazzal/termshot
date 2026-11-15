@@ -15,13 +15,11 @@ const PNG_MAGIC_PLUS_HEADER = new Uint8Array([
 const INVOCATION: Invocation = {
   command: "echo hi",
   output: "/fake/out.png",
-  settleMs: 0,
   cols: 120,
   rows: 30,
   publishDest: "gdrive:PR-Shots/x/",
   publishSize: 2560,
   publishLabel: null,
-  terminal: null,
   publisher: null,
 };
 
@@ -98,7 +96,7 @@ test("a child command exit code of 3 is reported as 3 in the result, not mistake
   expect(exitCodeFor(result)).not.toBe(3);
 });
 
-test("the terminal block reports the emulator and the grid the window was launched with", () => {
+test("the terminal block reports a null shell and the grid the window was launched with", () => {
   const artifactMap = new Map<string, Uint8Array>();
   const ports = fakePorts(artifactMap);
   ports.publisher.publish = () => ({ url: "https://example.com/x", markdown: "![x](https://example.com/x)" });
@@ -106,8 +104,8 @@ test("the terminal block reports the emulator and the grid the window was launch
 
   expect(result.terminal.cols).toBe(120);
   expect(result.terminal.rows).toBe(30);
-  expect(result.terminal.emulator).toBe("alacritty");
-  expect(Object.keys(result.terminal)).toEqual(["emulator", "cols", "rows"]);
+  expect(result.terminal.shell).toBeNull();
+  expect(Object.keys(result.terminal)).toEqual(["shell", "cols", "rows"]);
 });
 
 test("the publisher gets the written artifact's path and sha256, and the record names the publisher", () => {
@@ -141,13 +139,13 @@ test("the session is launched with a terminal-neutral spec built from the invoca
   expect(specs).toEqual([{ title: "termshot-test", script: expect.stringContaining("echo hi; echo $? > \"/fake/out.status\""), cols: 80, rows: 20 }]);
 });
 
-test("a launch failure still names the emulator, so the agent knows which terminal failed", () => {
+test("a launch failure leaves the grid null", () => {
   const ports = fakePorts(new Map());
   ports.session.launch = () => {
     throw new Error("Alacritty is not installed");
   };
   const result = runTermshot(setup(), ports);
   expect(result.status).toBe("environment-error");
-  expect(result.terminal).toEqual({ emulator: "alacritty", cols: null, rows: null });
+  expect(result.terminal).toEqual({ shell: null, cols: null, rows: null });
   expect(result.errors[0]!.step).toBe("terminal-session");
 });
