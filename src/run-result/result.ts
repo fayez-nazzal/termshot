@@ -16,12 +16,14 @@ export interface CaptureResult {
 }
 
 export interface TerminalResult {
+  emulator: string | null;
   cols: number | null;
   rows: number | null;
 }
 
 export interface PublishResult {
   requested: boolean;
+  publisher: string | null;
   url: string | null;
   markdown: string | null;
   verified: boolean;

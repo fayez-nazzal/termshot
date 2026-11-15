@@ -17,7 +17,11 @@ bun run build
 bun test
 ```
 
-The unit tests are pure and run on any platform. Running `termshot` for real needs macOS, `screencapture` and Ghostty.
+The unit tests are pure and run on any platform. Running `termshot` for real needs macOS, `screencapture` and one supported terminal.
+
+## Adding a terminal or a publisher
+
+Vendor specifics live in two places: terminals in `src/terminal-emulator/`, upload targets in `src/publishing/`. To add one, write an adapter beside the existing ones that implements `TerminalEmulator` or `Publisher`, register it in that folder's `registry.ts`, and add tests for it. The flags, config keys, help text and errors all read the list from the registry. `test/architecture.test.ts` fails if any other source file names a vendor.
 
 ## Code style
 

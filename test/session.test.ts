@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { HOLD_WINDOW_OPEN_SECONDS } from "../src/capture.ts";
-import { idempotentDisposer, registerSignalSafeDisposal } from "../src/terminal-session/session.ts";
+import { idempotentDisposer, launchSession, registerSignalSafeDisposal, TerminalNotInstalledError, uniqueWindowTitle } from "../src/terminal-session/session.ts";
+import type { TerminalEmulator } from "../src/terminal-emulator/terminal-emulator.ts";
 import type { SignalPort } from "../src/terminal-session/session.ts";
 
 function fakeSignalPort() {
@@ -56,8 +56,26 @@ test("registerSignalSafeDisposal wires dispose to exit, SIGINT and SIGTERM", () 
   expect(handlers.SIGTERM.length).toBe(1);
 });
 
-test("the window hold is derived from the capture budget, not the old flat five minutes", () => {
-  expect(HOLD_WINDOW_OPEN_SECONDS).toBe(75);
-  expect(HOLD_WINDOW_OPEN_SECONDS).not.toBe(300);
-  expect(HOLD_WINDOW_OPEN_SECONDS).toBeLessThan(300);
+test("uniqueWindowTitle looks like termshot-<pid>-<ms>", () => {
+  const a = uniqueWindowTitle();
+  expect(a).toMatch(/^termshot-\d+-\d+$/);
+  expect(a.startsWith(`termshot-${process.pid}-`)).toBe(true);
+});
+
+test("launching a terminal that is not installed fails with a named error before spawning anything", () => {
+  let argvRequested = false;
+  const missing: TerminalEmulator = {
+    id: "missing",
+    displayName: "Missing Term",
+    executable: "/nonexistent/termshot-test/missing-term",
+    launchArgv: () => {
+      argvRequested = true;
+      return [];
+    },
+  };
+  const { port, handlers } = fakeSignalPort();
+  expect(() => launchSession(missing, { title: "t", script: "true", cols: 1, rows: 1 }, port)).toThrow(TerminalNotInstalledError);
+  expect(() => launchSession(missing, { title: "t", script: "true", cols: 1, rows: 1 }, port)).toThrow("Missing Term is not installed (expected /nonexistent/termshot-test/missing-term). Choose another terminal (ghostty, alacritty) with --terminal <name> or `termshot config set terminal <name>`");
+  expect(argvRequested).toBe(false);
+  expect(handlers.exit.length).toBe(0);
 });

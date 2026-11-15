@@ -6,9 +6,13 @@ import { runCommand } from "./command-run/runner.ts";
 import type { ClockPort, StatusStorePort } from "./command-run/runner.ts";
 import type { Invocation } from "./invocation/invocation.ts";
 import type { RunError, RunResult, RunStatus } from "./run-result/result.ts";
+import type { PublishedImage, PublishRequest } from "./publishing/publisher.ts";
+import type { PublisherId } from "./publishing/registry.ts";
+import type { LaunchSpec } from "./terminal-emulator/terminal-emulator.ts";
+import type { TerminalId } from "./terminal-emulator/registry.ts";
 
 export interface SessionPort {
-  launch(title: string, script: string, cols: number, rows: number): number;
+  launch(spec: LaunchSpec): number;
   dispose(pid: number): void;
 }
 
@@ -24,13 +28,8 @@ export interface ArtifactsPort {
   write(path: string, data: Uint8Array): ArtifactRecord;
 }
 
-export interface PublishedRecord {
-  url: string;
-  markdown: string;
-}
-
 export interface PublisherPort {
-  publish(filePath: string, dest: string, size: number, label: string): PublishedRecord;
+  publish(request: PublishRequest): PublishedImage;
 }
 
 export interface RunPorts {
@@ -43,24 +42,35 @@ export interface RunPorts {
   publisher: PublisherPort;
 }
 
+export interface RunSetup {
+  version: string;
+  invocation: Invocation;
+  terminal: TerminalId;
+  publisher: PublisherId;
+  outputPath: string;
+  statusPath: string;
+  title: string;
+}
+
 const TOOL = "termshot";
 const WINDOW_TIMEOUT_MS = 15000;
 const COMMAND_TIMEOUT_MS = 60000;
 
-function failure(version: string, status: RunStatus, step: string, message: string): RunResult {
+function failure(setup: RunSetup, status: RunStatus, step: string, message: string): RunResult {
   const errors: RunError[] = [{ step, message }];
-  return buildResult({ tool: TOOL, version, status, errors });
+  return buildResult({ tool: TOOL, version: setup.version, status, terminal: { emulator: setup.terminal }, errors });
 }
 
-export function runTermshot(version: string, invocation: Invocation, outputPath: string, statusPath: string, ports: RunPorts, title: string): RunResult {
+export function runTermshot(setup: RunSetup, ports: RunPorts): RunResult {
+  const { version, invocation, outputPath, statusPath, title } = setup;
   let result: RunResult;
   const plan = buildRunPlan(invocation, statusPath);
 
   let pid: number;
   try {
-    pid = ports.session.launch(title, plan.innerScriptText, invocation.cols, invocation.rows);
+    pid = ports.session.launch({ title, script: plan.innerScriptText, cols: invocation.cols, rows: invocation.rows });
   } catch (e) {
-    result = failure(version, "environment-error", "terminal-session", (e as Error).message);
+    result = failure(setup, "environment-error", "terminal-session", (e as Error).message);
     return result;
   }
 
@@ -69,7 +79,7 @@ export function runTermshot(version: string, invocation: Invocation, outputPath:
     windowId = ports.windows.waitForWindow(pid, WINDOW_TIMEOUT_MS);
   } catch (e) {
     ports.session.dispose(pid);
-    result = failure(version, "environment-error", "terminal-session", (e as Error).message);
+    result = failure(setup, "environment-error", "terminal-session", (e as Error).message);
     return result;
   }
 
@@ -82,6 +92,7 @@ export function runTermshot(version: string, invocation: Invocation, outputPath:
       tool: TOOL,
       version,
       status: "timeout",
+      terminal: { emulator: setup.terminal },
       command: { argv: [invocation.command], exitStatus: null, durationMs: commandRun.durationMs, timedOut: true },
       errors: [{ step: "command-run", message: `command did not finish within ${COMMAND_TIMEOUT_MS}ms` }],
     });
@@ -93,7 +104,7 @@ export function runTermshot(version: string, invocation: Invocation, outputPath:
     png = ports.capture.grab(windowId);
   } catch (e) {
     ports.session.dispose(pid);
-    result = failure(version, "environment-error", "screen-capture", (e as Error).message);
+    result = failure(setup, "environment-error", "screen-capture", (e as Error).message);
     return result;
   }
   ports.session.dispose(pid);
@@ -118,13 +129,15 @@ export function runTermshot(version: string, invocation: Invocation, outputPath:
     status = "internal-error";
   }
 
+  let publisher: string | null = null;
   let publishUrl: string | null = null;
   let publishMarkdown: string | null = null;
   let publishVerified = false;
   if (invocation.publishDest != null) {
+    publisher = setup.publisher;
     const label = invocation.publishLabel ?? artifact.path;
     try {
-      const published = ports.publisher.publish(artifact.path, invocation.publishDest, invocation.publishSize, label);
+      const published = ports.publisher.publish({ filePath: artifact.path, sha256: artifact.sha256, dest: invocation.publishDest, size: invocation.publishSize, label });
       publishUrl = published.url;
       publishMarkdown = published.markdown;
       publishVerified = true;
@@ -140,8 +153,8 @@ export function runTermshot(version: string, invocation: Invocation, outputPath:
     status,
     command: { argv: [invocation.command], exitStatus: commandRun.exitStatus, durationMs: commandRun.durationMs, timedOut: false },
     capture: { path: artifact.path, bytes: artifact.bytes, sha256: artifact.sha256, width, height },
-    terminal: { cols: invocation.cols, rows: invocation.rows },
-    publish: { requested: invocation.publishDest != null, url: publishUrl, markdown: publishMarkdown, verified: publishVerified },
+    terminal: { emulator: setup.terminal, cols: invocation.cols, rows: invocation.rows },
+    publish: { requested: invocation.publishDest != null, publisher, url: publishUrl, markdown: publishMarkdown, verified: publishVerified },
     errors,
   });
   return result;

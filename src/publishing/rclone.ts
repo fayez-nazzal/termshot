@@ -1,25 +1,11 @@
-// Upload a captured file to a Google Drive rclone remote, make it public, and
-// build the PR-ready embed. Operates on the file path and URLs only and never
-// reads the image bytes: rclone moves the file by path, curl checks a URL header.
-//
-// This file is deliberately duplicated with browsershot rather than shared. The
-// contract test beside it pins the observable behaviour so drift fails this
-// repo's own suite.
+import { imageMarkdown, servesPublicImage } from "./image-url.ts";
+import { commandExists, runCommand } from "./process.ts";
+import type { PublishedImage, PublishRequest, Publisher } from "./publisher.ts";
 
-export const DEFAULT_EMBED_WIDTH = 2560;
-
-export interface PublishOptions {
-  filePath: string;
-  dest: string;
-  size: number;
-  label: string;
-}
-
-export interface PublishResult {
-  markdown: string;
-  url: string;
-  fileId: string | null;
-}
+// Uploads to a Google Drive rclone remote and embeds the file through Drive.
+// Operates on the file path and URLs only: rclone moves the file by path,
+// curl checks a URL header. Kept in step with browsershot's copy of this
+// adapter; the tests beside it pin the observable behaviour.
 
 export function remoteName(dest: string): string {
   const idx = dest.indexOf(":");
@@ -64,10 +50,6 @@ export function embedUrl(fileId: string, size: number): string {
   return `https://lh3.googleusercontent.com/d/${fileId}=w${size}`;
 }
 
-export function pngMarkdown(label: string, url: string): string {
-  return `![${label}](${url})`;
-}
-
 export function rcloneRemoteConfigured(remote: string, listRemotesOutput: string): boolean {
   const target = `${remote}:`;
   const lines = listRemotesOutput.split("\n");
@@ -80,40 +62,8 @@ export function rcloneRemoteConfigured(remote: string, listRemotesOutput: string
   return result;
 }
 
-// curl -sIL concatenates a header block per hop; keep only the last status and
-// content-type seen, so the final response is the one that must be a 200 image.
-export function imageHeadersOk(headOutput: string): boolean {
-  const lines = headOutput.split("\n");
-  let lastStatusOk = false;
-  let lastTypeImage = false;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^HTTP\//i.test(trimmed)) {
-      lastStatusOk = / 200(\s|$)/.test(trimmed);
-    }
-    if (/^content-type:/i.test(trimmed)) {
-      lastTypeImage = /content-type:\s*image\//i.test(trimmed);
-    }
-  }
-  return lastStatusOk && lastTypeImage;
-}
-
-interface CommandResult {
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-}
-
-function runCommand(cmd: string[]): CommandResult {
-  const proc = Bun.spawnSync(cmd);
-  const stdout = new TextDecoder().decode(proc.stdout);
-  const stderr = new TextDecoder().decode(proc.stderr);
-  return { ok: proc.success, stdout, stderr };
-}
-
 function requireRclone(remote: string): void {
-  const found = Bun.spawnSync(["which", "rclone"]);
-  if (!found.success) {
+  if (!commandExists("rclone")) {
     throw new Error(`rclone not installed. One-time setup: brew install rclone, then rclone config to create a Google Drive remote named "${remote}".`);
   }
   const listed = runCommand(["rclone", "listremotes"]);
@@ -131,28 +81,20 @@ function driveShareUrl(remotePath: string): string {
   return linked.stdout.trim();
 }
 
-export function publish(opts: PublishOptions): PublishResult {
-  const remote = remoteName(opts.dest);
-  if (remote === "") {
-    throw new Error(`--publish dest must look like remote:path, got "${opts.dest}"`);
-  }
-  requireRclone(remote);
-
-  const dest = normalizeDest(opts.dest);
-  const copied = runCommand(["rclone", "copy", opts.filePath, dest]);
+function publishToDrive(request: PublishRequest): PublishedImage {
+  requireRclone(remoteName(request.dest));
+  const dest = normalizeDest(request.dest);
+  const copied = runCommand(["rclone", "copy", request.filePath, dest]);
   if (!copied.ok) {
     const detail = copied.stderr.trim() || `exit`;
     throw new Error(`rclone copy failed: ${detail}`);
   }
 
-  const remotePath = `${dest}${basename(opts.filePath)}`;
-  const shareUrl = driveShareUrl(remotePath);
-
-  let result: PublishResult;
+  const remotePath = `${dest}${basename(request.filePath)}`;
   let attempt = 0;
   let verified = false;
   let url = "";
-  let fileId = extractDriveFileId(shareUrl);
+  let fileId = extractDriveFileId(driveShareUrl(remotePath));
   while (attempt < 2 && !verified) {
     if (attempt > 0) {
       fileId = extractDriveFileId(driveShareUrl(remotePath));
@@ -160,14 +102,29 @@ export function publish(opts: PublishOptions): PublishResult {
     if (fileId === null) {
       throw new Error(`could not extract a Drive file id from the share url`);
     }
-    url = embedUrl(fileId, opts.size);
-    const head = runCommand(["curl", "-sIL", url]);
-    verified = imageHeadersOk(head.stdout);
+    url = embedUrl(fileId, request.size);
+    verified = servesPublicImage(url);
     attempt = attempt + 1;
   }
   if (!verified) {
     throw new Error(`embed url did not verify as a 200 image for ${url}`);
   }
-  result = { markdown: pngMarkdown(opts.label, url), url, fileId };
-  return result;
+  return { url, markdown: imageMarkdown(request.label, url) };
 }
+
+function destinationProblem(dest: string): string | null {
+  let problem: string | null = null;
+  if (remoteName(dest) === "") {
+    problem = `--publish dest for rclone must look like remote:path, got "${dest}"`;
+  }
+  return problem;
+}
+
+export const rclone: Publisher = {
+  id: "rclone",
+  displayName: "rclone (Google Drive)",
+  destinationFormat: "remote:path, a Google Drive rclone remote (e.g. gdrive:PR-Shots/)",
+  resizesEmbed: true,
+  destinationProblem,
+  publish: publishToDrive,
+};

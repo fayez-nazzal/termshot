@@ -1,4 +1,4 @@
-// The only JXA in the repo. Resolves a Ghostty window strictly by the pid
+// The only JXA in the repo. Resolves a terminal window strictly by the pid
 // that owns it, never by title or owner-name substring matching, so a window
 // can never be picked up by accident just because its title happens to
 // contain "termshot".
@@ -87,4 +87,18 @@ export function resolveWindowIdByPid(windows: WindowInfo[], pid: number): number
 
 export function findWindowIdByPid(pid: number): number | undefined {
   return resolveWindowIdByPid(queryWindows(), pid);
+}
+
+// Polls until the process owns exactly one on-screen window, and returns its id.
+export function waitForWindow(pid: number, timeoutMs: number): number {
+  const deadline = Date.now() + timeoutMs;
+  let id = findWindowIdByPid(pid);
+  while (id == null && Date.now() < deadline) {
+    Bun.sleepSync(250);
+    id = findWindowIdByPid(pid);
+  }
+  if (id == null) {
+    throw new Error(`terminal process ${pid} did not open a window within ${timeoutMs}ms`);
+  }
+  return id;
 }

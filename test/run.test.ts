@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { exitCodeFor } from "../src/run-result/exit-codes.ts";
 import { runTermshot } from "../src/run.ts";
-import type { RunPorts } from "../src/run.ts";
+import type { RunPorts, RunSetup } from "../src/run.ts";
 import type { Invocation } from "../src/invocation/invocation.ts";
 
 const PNG_MAGIC_PLUS_HEADER = new Uint8Array([
@@ -21,7 +21,13 @@ const INVOCATION: Invocation = {
   publishDest: "gdrive:PR-Shots/x/",
   publishSize: 2560,
   publishLabel: null,
+  terminal: null,
+  publisher: null,
 };
+
+function setup(invocation: Invocation = INVOCATION): RunSetup {
+  return { version: "0.5.0", invocation, terminal: "alacritty", publisher: "gh", outputPath: "/fake/out.png", statusPath: "/fake/out.status", title: "termshot-test" };
+}
 
 function fakePorts(artifactMap: Map<string, Uint8Array>): RunPorts {
   return {
@@ -59,7 +65,7 @@ function fakePorts(artifactMap: Map<string, Uint8Array>): RunPorts {
 test("a capture survives a failing downstream publish step", () => {
   const artifactMap = new Map<string, Uint8Array>();
   const ports = fakePorts(artifactMap);
-  const result = runTermshot("0.5.0", INVOCATION, "/fake/out.png", "/fake/out.status", ports, "termshot-test");
+  const result = runTermshot(setup(), ports);
 
   expect(artifactMap.size).toBe(1);
   expect(artifactMap.has("/fake/out.png")).toBe(true);
@@ -83,7 +89,7 @@ test("a child command exit code of 3 is reported as 3 in the result, not mistake
   };
   ports.publisher.publish = () => ({ url: "https://example.com/x.png", markdown: "![x](https://example.com/x.png)" });
 
-  const result = runTermshot("0.5.0", { ...INVOCATION, publishDest: null }, "/fake/out.png", "/fake/out.status", ports, "termshot-test");
+  const result = runTermshot(setup({ ...INVOCATION, publishDest: null }), ports);
 
   expect(result.command.exitStatus).toBe(3);
   expect(result.status).toBe("command-failed");
@@ -92,13 +98,56 @@ test("a child command exit code of 3 is reported as 3 in the result, not mistake
   expect(exitCodeFor(result)).not.toBe(3);
 });
 
-test("the terminal block reports the grid the window was launched with", () => {
+test("the terminal block reports the emulator and the grid the window was launched with", () => {
   const artifactMap = new Map<string, Uint8Array>();
   const ports = fakePorts(artifactMap);
   ports.publisher.publish = () => ({ url: "https://example.com/x", markdown: "![x](https://example.com/x)" });
-  const result = runTermshot("0.5.0", INVOCATION, "/fake/out.png", "/fake/out.status", ports, "termshot-test");
+  const result = runTermshot(setup(), ports);
 
   expect(result.terminal.cols).toBe(120);
   expect(result.terminal.rows).toBe(30);
-  expect(Object.keys(result.terminal)).toEqual(["cols", "rows"]);
+  expect(result.terminal.emulator).toBe("alacritty");
+  expect(Object.keys(result.terminal)).toEqual(["emulator", "cols", "rows"]);
+});
+
+test("the publisher gets the written artifact's path and sha256, and the record names the publisher", () => {
+  const ports = fakePorts(new Map());
+  const requests: unknown[] = [];
+  ports.publisher.publish = (request) => {
+    requests.push(request);
+    return { url: "https://example.com/x.png", markdown: "![x](https://example.com/x.png)" };
+  };
+  const result = runTermshot(setup(), ports);
+  expect(requests).toEqual([{ filePath: "/fake/out.png", sha256: "fake", dest: "gdrive:PR-Shots/x/", size: 2560, label: "/fake/out.png" }]);
+  expect(result.publish).toEqual({ requested: true, publisher: "gh", url: "https://example.com/x.png", markdown: "![x](https://example.com/x.png)", verified: true });
+});
+
+test("without --publish the record names no publisher", () => {
+  const ports = fakePorts(new Map());
+  const result = runTermshot(setup({ ...INVOCATION, publishDest: null }), ports);
+  expect(result.publish.publisher).toBeNull();
+  expect(result.publish.requested).toBe(false);
+});
+
+test("the session is launched with a terminal-neutral spec built from the invocation", () => {
+  const ports = fakePorts(new Map());
+  ports.publisher.publish = () => ({ url: "https://example.com/x", markdown: "![x](https://example.com/x)" });
+  const specs: unknown[] = [];
+  ports.session.launch = (spec) => {
+    specs.push(spec);
+    return 1;
+  };
+  runTermshot(setup({ ...INVOCATION, cols: 80, rows: 20 }), ports);
+  expect(specs).toEqual([{ title: "termshot-test", script: expect.stringContaining("echo hi; echo $? > \"/fake/out.status\""), cols: 80, rows: 20 }]);
+});
+
+test("a launch failure still names the emulator, so the agent knows which terminal failed", () => {
+  const ports = fakePorts(new Map());
+  ports.session.launch = () => {
+    throw new Error("Alacritty is not installed");
+  };
+  const result = runTermshot(setup(), ports);
+  expect(result.status).toBe("environment-error");
+  expect(result.terminal).toEqual({ emulator: "alacritty", cols: null, rows: null });
+  expect(result.errors[0]!.step).toBe("terminal-session");
 });

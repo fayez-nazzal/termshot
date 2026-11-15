@@ -1,8 +1,8 @@
 ---
 name: termshot
-description: Runs one shell command in a fresh Ghostty window on macOS, captures that window to a PNG, and prints one JSON line with the path, byte size and sha256 of the image. Use when you need visual proof that a terminal command ran, such as PR evidence, a screenshot of a test run, build output, a log or a CLI demo. Triggers on "screenshot the terminal", "capture this command", "termshot", "show the test output as an image", "attach terminal evidence to the PR", "prove this command passed", "grab a PNG of the build log". Also use when a task asks for before and after terminal evidence, or when a reviewer needs to see command output without running it. Do not use for web pages or rendered UI, use a browser capture tool for those.
+description: Screenshot a terminal command to a PNG on macOS and get a JSON record with its path and sha256. Use for terminal evidence (PR screenshots of tests, builds, logs, CLI demos) or when asked to "termshot" or "capture this command". Not for web pages or app UI.
 license: MIT
-compatibility: macOS only. Needs Ghostty at `/Applications/Ghostty.app` and Screen Recording permission for the calling terminal. Needs `termshot` on `PATH`.
+compatibility: macOS only. Needs `termshot` on PATH, Ghostty or Alacritty in /Applications, and Screen Recording permission for the calling terminal.
 metadata:
   author: Fayez Nazzal
   version: "0.6.1"
@@ -10,73 +10,40 @@ metadata:
 
 # termshot
 
-Runs a command in a fresh Ghostty window, captures the window to a PNG, and prints one JSON line describing the run.
+Runs one command in a fresh terminal window, saves a PNG of it, and prints one JSON line on stdout.
 
-## When to use
-
-- You need PNG evidence of a command, test run, build or log for a PR.
-- You need to prove an artifact exists and is the exact file you just made.
-- You need before and after terminal evidence for a change.
-- The subject is a terminal. Rendered pages and app UI go to a browser capture tool.
-
-## Check first
-
-Run this once before the first capture.
-
-```sh
-sw_vers -productVersion
-ls /Applications/Ghostty.app/Contents/MacOS/ghostty
-termshot --run "echo preflight" -o /tmp/preflight.png > /tmp/preflight.json
-jq -r .status /tmp/preflight.json
-```
-
-- `jq` must print `ok`.
-- `environment-error` at step `screen-capture` means Screen Recording permission is missing. Grant it under `System Settings` then `Privacy & Security` then `Screen Recording`, then restart the calling terminal.
-- `termshot: command not found` after a fresh clone means `dist/termshot` is not built. Run `bun run build` then `bun link`.
-
-## Core recipe
+## Capture
 
 ```sh
 termshot --run "bun test" -o /tmp/evidence.png > /tmp/evidence.json
-jq -r '.status, .command.exitStatus, .capture.path, .capture.sha256' /tmp/evidence.json
-shasum -a 256 "$(jq -r .capture.path /tmp/evidence.json)"
+jq -r '.status, .command.exitStatus, .capture.path' /tmp/evidence.json
 ```
 
-Assert on this.
+- Pass an absolute `-o` path. The record echoes it back as given.
+- `--cols <n> --rows <n>` sets the grid (default 120x30).
+- The command must finish by itself within 60 seconds.
+- For a failing exit, use `--run "sh -c 'exit 3'"`. A bare trailing `exit` kills the wrapper and the run times out.
 
-- `status` is `ok` or `command-failed`.
-- `capture.path` is the absolute path you passed.
-- The `shasum` output matches `capture.sha256`.
+## Read the result
 
-Add `--cols 60 --rows 12` to pick the terminal grid. The `terminal` block reports the grid the window really used.
+- `status` is the run verdict. `ok` and `command-failed` both mean the PNG was written.
+- `command.exitStatus` is the captured command's exit status. `exitCode` is termshot's own exit code. Judge the command by `command.exitStatus`.
+- `capture.path`, `capture.sha256` describe the PNG.
+- `terminal.emulator` is the terminal used.
+- On failure, `errors[]` holds `{step, message}`.
 
-## Reading the result
+## Publish
 
-Stdout is exactly one JSON line, on success and on failure. Human lines go to stderr.
+Only when the user asks to upload or post the screenshot, add `--publish <dest>`. The dest format depends on their `publisher` config: a PR number, URL or branch for `gh` (posts the image as a PR comment), or `remote:path` for `rclone`. Report `publish.url` when `publish.verified` is `true`.
 
-- `status` is the verdict for the whole run.
-- `exitCode` is the exit code of `termshot` itself.
-- `command.exitStatus` is the exit status of the command you captured. It is a different number from `exitCode`.
-- `capture.path`, `capture.bytes` and `capture.sha256` describe the PNG, or are `null` when none was written.
-- `errors[]` holds objects with a `step` and a `message`.
+## When it fails
 
-Exit codes worth branching on.
+- `environment-error`, step `terminal-session`, "is not installed": the configured terminal is missing. Retry once with `--terminal ghostty` or `--terminal alacritty`, and tell the user. Leave their config as is.
+- `environment-error`, step `screen-capture`: Screen Recording permission is missing. Ask the user to grant it in System Settings, Privacy & Security, Screen Recording, then restart their terminal.
+- `usage-error`, step `config`: their config file is invalid. Show them the message.
+- `timeout`: the command ran past 60 seconds or ended in `exit`.
+- `publish-failed`: the PNG is still on disk; the upload failed. Show the user the message.
 
-- `0` `ok`. PNG written, command passed.
-- `1` `command-failed`. PNG written, command exited non zero. Still good evidence.
-- `2` `usage-error`. Bad flags, nothing ran.
-- `3` `environment-error`. Ghostty, the window or `screencapture` failed.
-- `4` `timeout`. The command did not finish in 60 seconds.
-- `6` `publish-failed`. PNG written, upload failed.
-- `7` `internal-error`. PNG written, header could not be read back.
+## Report
 
-## Rules
-
-- Never open, read or base64 the PNG. Read the JSON line instead.
-- Always pass an absolute path to `-o`. The record echoes back whatever you passed.
-- Never end the command with `exit`. It kills the wrapper shell and the run times out. Use `--run "sh -c 'exit 3'"` instead.
-- Never run an interactive command. It has to finish on its own.
-- Read `command.exitStatus` for the command verdict and `exitCode` for the tool verdict. Mixing them reports a failing command as passing.
-- Report the path, the verdict and the command exit status in plain words. Never paste the image, the base64 or the whole record.
-
-Full recipes and the complete pitfall table live in `AGENTS.md` at the repo root.
+Tell the user the PNG path, the `status`, and the command's exit status in plain words. Add the `sha256` only when proving the file is unchanged. Work from the JSON line alone; leave the PNG unopened.

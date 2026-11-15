@@ -1,5 +1,7 @@
 import { parseArgs } from "node:util";
-import { DEFAULT_EMBED_WIDTH } from "../publish.ts";
+import { DEFAULT_EMBED_WIDTH } from "../publishing/publisher.ts";
+import { parsePublisherId } from "../publishing/registry.ts";
+import { parseTerminalId } from "../terminal-emulator/registry.ts";
 import type { Invocation } from "./invocation.ts";
 
 export const DEFAULT_RUN_COLS = 120;
@@ -40,6 +42,8 @@ function parseArgv(argv: string[]) {
       publish: { type: "string" },
       "publish-size": { type: "string" },
       "publish-label": { type: "string" },
+      publisher: { type: "string" },
+      terminal: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false },
     },
@@ -60,10 +64,12 @@ export function parseFlags(argv: string[]): FlagsResult {
           ok: true,
           help: Boolean(values.help),
           version: Boolean(values.version),
-          invocation: { command: "", output: null, settleMs: 500, cols: DEFAULT_RUN_COLS, rows: DEFAULT_RUN_ROWS, publishDest: null, publishSize: DEFAULT_EMBED_WIDTH, publishLabel: null },
+          invocation: { command: "", output: null, settleMs: 500, cols: DEFAULT_RUN_COLS, rows: DEFAULT_RUN_ROWS, publishDest: null, publishSize: DEFAULT_EMBED_WIDTH, publishLabel: null, publisher: null, terminal: null },
         };
       } else if (values.run == null) {
         result = { ok: false, message: "--run <command> is required" };
+      } else if (values.publisher != null && values.publish == null) {
+        result = { ok: false, message: "--publisher only applies with --publish <dest>" };
       } else {
         const invocation: Invocation = {
           command: values.run,
@@ -74,6 +80,8 @@ export function parseFlags(argv: string[]): FlagsResult {
           publishDest: values.publish ?? null,
           publishSize: values["publish-size"] != null ? intFlag("publish-size", values["publish-size"]) : DEFAULT_EMBED_WIDTH,
           publishLabel: values["publish-label"] ?? null,
+          publisher: values.publisher != null ? parsePublisherId(values.publisher) : null,
+          terminal: values.terminal != null ? parseTerminalId(values.terminal) : null,
         };
         result = { ok: true, help: false, version: false, invocation };
       }

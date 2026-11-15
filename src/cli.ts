@@ -3,21 +3,33 @@
 import { readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { captureScreen, closeGhosttyProcess, uniqueWindowTitle, waitForWindow } from "./capture.ts";
-import { processSignalPort, launchSession } from "./terminal-session/session.ts";
-import { publish } from "./publish.ts";
+import { effectiveConfig, setConfigValue, unsetConfigValue } from "./configuration/config.ts";
+import type { Config, StoredConfig } from "./configuration/config.ts";
+import { configPath, readStoredConfig, writeStoredConfig } from "./configuration/config-store.ts";
+import { processSignalPort, launchSession, terminateProcess, uniqueWindowTitle } from "./terminal-session/session.ts";
+import { waitForWindow } from "./terminal-session/window-lookup.ts";
+import { captureWindow } from "./screen-capture/screen-capture.ts";
 import { writeArtifact } from "./screen-capture/artifact.ts";
+import { parseConfigCommand } from "./invocation/config-command.ts";
+import type { ConfigCommand } from "./invocation/config-command.ts";
 import { parseFlags } from "./invocation/flags.ts";
 import { helpText } from "./invocation/help.ts";
 import { buildResult } from "./run-result/build.ts";
 import { emit } from "./run-result/emit.ts";
 import { exitCodeFor } from "./run-result/exit-codes.ts";
+import type { RunStatus } from "./run-result/result.ts";
+import { publisherFor } from "./publishing/registry.ts";
+import type { Publisher } from "./publishing/publisher.ts";
+import { terminalEmulator } from "./terminal-emulator/registry.ts";
+import type { TerminalEmulator } from "./terminal-emulator/terminal-emulator.ts";
 import { runTermshot } from "./run.ts";
 import type { RunPorts } from "./run.ts";
 import packageJson from "../package.json";
 
 export const VERSION = packageJson.version;
 export { DEFAULT_RUN_COLS, DEFAULT_RUN_ROWS } from "./invocation/flags.ts";
+
+const TOOL = "termshot";
 
 function timestamp(): string {
   const d = new Date();
@@ -39,13 +51,13 @@ function readStatusFile(path: string): string {
   return result;
 }
 
-function buildLivePorts(): RunPorts {
+function buildLivePorts(emulator: TerminalEmulator, publisher: Publisher): RunPorts {
   const sessionDisposers = new Map<number, () => void>();
   const signals = processSignalPort();
   return {
     session: {
-      launch: (title: string, script: string, cols: number, rows: number) => {
-        const session = launchSession(title, script, cols, rows, signals);
+      launch: (spec) => {
+        const session = launchSession(emulator, spec, signals);
         sessionDisposers.set(session.pid, session.dispose);
         return session.pid;
       },
@@ -54,7 +66,7 @@ function buildLivePorts(): RunPorts {
         if (dispose != null) {
           dispose();
         } else {
-          closeGhosttyProcess(pid);
+          terminateProcess(pid);
         }
       },
     },
@@ -62,7 +74,7 @@ function buildLivePorts(): RunPorts {
       waitForWindow,
     },
     capture: {
-      grab: (windowId: number) => captureScreen({ windowId }),
+      grab: captureWindow,
     },
     artifacts: {
       write: writeArtifact,
@@ -75,29 +87,95 @@ function buildLivePorts(): RunPorts {
       sleep: (ms: number) => Bun.sleepSync(ms),
     },
     publisher: {
-      publish: (filePath: string, dest: string, size: number, label: string) => publish({ filePath, dest, size, label }),
+      publish: (request) => publisher.publish(request),
     },
   };
 }
 
-function main() {
-  const flags = parseFlags(process.argv.slice(2));
+function fail(status: RunStatus, step: string, message: string): never {
+  const result = buildResult({ tool: TOOL, version: VERSION, status, errors: [{ step, message }] });
+  emit(result);
+  process.exit(exitCodeFor(result));
+}
 
+function loadStoredConfig(path: string): StoredConfig {
+  let stored: StoredConfig = {};
+  try {
+    stored = readStoredConfig(path);
+  } catch (e) {
+    fail("usage-error", "config", (e as Error).message);
+  }
+  return stored;
+}
+
+function applyConfigCommand(stored: StoredConfig, command: ConfigCommand): StoredConfig {
+  let next = stored;
+  if (command.action === "set") {
+    next = setConfigValue(stored, command.key, command.value);
+  } else if (command.action === "unset") {
+    next = unsetConfigValue(stored, command.key);
+  }
+  return next;
+}
+
+function runConfig(args: string[]): void {
+  const parsed = parseConfigCommand(args);
+  if (!parsed.ok) {
+    fail("usage-error", "config", parsed.message);
+  }
+  const path = configPath();
+  const stored = loadStoredConfig(path);
+  let next: StoredConfig = stored;
+  try {
+    next = applyConfigCommand(stored, parsed.command);
+  } catch (e) {
+    fail("usage-error", "config", (e as Error).message);
+  }
+  if (parsed.command.action !== "show") {
+    try {
+      writeStoredConfig(path, next);
+    } catch (e) {
+      fail("environment-error", "config", (e as Error).message);
+    }
+  }
+  const config: Config = effectiveConfig(next);
+  process.stdout.write(`${JSON.stringify({ tool: TOOL, version: VERSION, configPath: path, config })}\n`);
+}
+
+function runCapture(argv: string[]): void {
+  const flags = parseFlags(argv);
   if (!flags.ok) {
-    const result = buildResult({ tool: "termshot", version: VERSION, status: "usage-error", errors: [{ step: "flags", message: flags.message }] });
-    emit(result);
-    process.exit(exitCodeFor(result));
+    fail("usage-error", "flags", flags.message);
   } else if (flags.help) {
     process.stdout.write(helpText(VERSION));
   } else if (flags.version) {
     process.stdout.write(`${VERSION}\n`);
   } else {
+    const config = effectiveConfig(loadStoredConfig(configPath()));
+    const terminal = flags.invocation.terminal ?? config.terminal;
+    const publisherId = flags.invocation.publisher ?? config.publisher;
+    const publisher = publisherFor(publisherId);
+    if (flags.invocation.publishDest != null) {
+      const problem = publisher.destinationProblem(flags.invocation.publishDest);
+      if (problem != null) {
+        fail("usage-error", "flags", problem);
+      }
+    }
     const outputPath = flags.invocation.output ?? defaultOutputPath();
     const title = uniqueWindowTitle();
     const statusPath = join(tmpdir(), `${title}.status`);
-    const result = runTermshot(VERSION, flags.invocation, outputPath, statusPath, buildLivePorts(), title);
+    const result = runTermshot({ version: VERSION, invocation: flags.invocation, terminal, publisher: publisherId, outputPath, statusPath, title }, buildLivePorts(terminalEmulator(terminal), publisher));
     emit(result);
     process.exit(exitCodeFor(result));
+  }
+}
+
+function main() {
+  const argv = process.argv.slice(2);
+  if (argv[0] === "config") {
+    runConfig(argv.slice(1));
+  } else {
+    runCapture(argv);
   }
 }
 

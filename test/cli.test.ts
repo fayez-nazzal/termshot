@@ -24,10 +24,28 @@ for (const flag of REMOVED_FLAGS) {
   });
 }
 
-test("capture.ts never invokes screencapture's interactive window picker", () => {
-  const text = readFileSync(join(import.meta.dir, "..", "src", "capture.ts"), "utf8");
-  expect(text).not.toContain("resolveWindowId");
-  expect(text).not.toMatch(/args\.push\("-w"\)/);
+test("--terminal with an unsupported name exits with a usage error listing the supported terminals", () => {
+  const proc = Bun.spawnSync(["bun", "src/cli.ts", "--run", "echo hi", "--terminal", "kitty"]);
+  expect(proc.exitCode).toBe(2);
+  const record = JSON.parse(new TextDecoder().decode(proc.stdout));
+  expect(record.status).toBe("usage-error");
+  expect(record.errors[0].message).toContain("supported terminals: ghostty, alacritty");
+});
+
+test("--publisher without --publish is a usage error", () => {
+  const proc = Bun.spawnSync(["bun", "src/cli.ts", "--run", "echo hi", "--publisher", "gh"]);
+  expect(proc.exitCode).toBe(2);
+  expect(JSON.parse(new TextDecoder().decode(proc.stdout)).errors[0].message).toContain("--publisher only applies with --publish");
+});
+
+test("--help documents --terminal and the config command", () => {
+  const proc = Bun.spawnSync(["bun", "src/cli.ts", "--help"]);
+  const text = new TextDecoder().decode(proc.stdout);
+  expect(text).toContain("--terminal <name>");
+  expect(text).toContain("termshot config set <key> <value>");
+  expect(text).toContain("ghostty, alacritty");
+  expect(text).toContain("--publisher <name>");
+  expect(text).toContain("pull request number, URL or branch");
 });
 
 test("VERSION comes from package.json", () => {
