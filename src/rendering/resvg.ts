@@ -20,7 +20,12 @@ export async function rasterize(svg: string, scale: number): Promise<Uint8Array>
   });
   let result: Uint8Array;
   try {
-    result = resvg.render().asPng();
+    const image = resvg.render();
+    try {
+      result = image.asPng();
+    } finally {
+      image.free();
+    }
   } finally {
     resvg.free();
   }

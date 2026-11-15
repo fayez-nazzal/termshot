@@ -60,3 +60,36 @@ test("font size setting is 10 to 48, default 18", () => {
   expect(() => setting.parse(9)).toThrow();
   expect(() => setting.parse(49)).toThrow();
 });
+
+function styled(patch: Partial<FrameCell>, char = "x"): Frame {
+  const frame = frameOf([char], 3);
+  frame.rows[0]![0] = { ...frame.rows[0]![0]!, ...patch };
+  return frame;
+}
+const dark = themeFor("dark");
+const svgOf = (frame: Frame) => frameToSvg(frame, dark, 18, FONT_FAMILY).svg;
+
+test("inverse swaps default paints to theme colors", () => {
+  const svg = svgOf(styled({ inverse: true }));
+  expect(svg).toContain(`fill="${dark.foreground}"/>`);
+  expect(svg).toContain(`fill="${dark.background}">x</text>`);
+});
+test("bold, italic, underline and dim become attributes", () => {
+  const svg = svgOf(styled({ bold: true, italic: true, underline: true, dim: true }));
+  for (const attribute of [`font-weight="bold"`, `font-style="italic"`, `text-decoration="underline"`, `opacity="0.6"`]) {
+    expect(svg).toContain(attribute);
+  }
+});
+test("apostrophes are escaped", () => {
+  expect(svgOf(styled({}, "'"))).toContain("&apos;");
+});
+test("a non-default background draws a rect", () => {
+  const svg = svgOf(styled({ bg: { kind: "rgb", rgb: 0xff0000 } }));
+  expect(svg).toContain(`width="10.8" height="27" fill="#ff0000"`);
+});
+test("control characters become spaces", () => {
+  const svg = svgOf(styled({}, "\x00"));
+  expect(svg).not.toContain("\x00");
+  expect(svg).not.toContain("\x1b");
+  expect(svgOf(styled({ char: "\x1b" }, "a"))).not.toContain("\x1b");
+});

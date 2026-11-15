@@ -17,8 +17,13 @@ function pixels(value: number): number {
   return Math.ceil(Number(value.toFixed(6)));
 }
 
+function num(value: number): string {
+  return String(Number(value.toFixed(3)));
+}
+
 function escapeXml(text: string): string {
-  return text.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[ch]!);
+  // C0 controls and DEL are invalid XML.
+  return text.replace(/[\x00-\x1f\x7f]/g, " ").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[ch]!);
 }
 
 function resolve(paint: Paint, theme: Theme): string | null {
@@ -79,15 +84,15 @@ export function frameToSvg(frame: Frame, theme: Theme, fontSize: number, fontFam
     const flushBackground = () => {
       const { background } = state;
       if (background) {
-        const x = PADDING + background.start * cellWidth;
-        parts.push(`<rect x="${x}" y="${top}" width="${(background.end - background.start) * cellWidth}" height="${lineHeight}" fill="${background.color}"/>`);
+        const x = num(PADDING + background.start * cellWidth);
+        parts.push(`<rect x="${x}" y="${num(top)}" width="${num((background.end - background.start) * cellWidth)}" height="${num(lineHeight)}" fill="${background.color}"/>`);
         state.background = null;
       }
     };
     const flushRun = () => {
       const { run } = state;
       if (run && (run.text.trim() !== "" || run.style.underline)) {
-        parts.push(`<text xml:space="preserve" x="${PADDING + run.start * cellWidth}" y="${baseline}"${textAttributes(run.style)}>${escapeXml(run.text)}</text>`);
+        parts.push(`<text xml:space="preserve" x="${num(PADDING + run.start * cellWidth)}" y="${num(baseline)}"${textAttributes(run.style)}>${escapeXml(run.text)}</text>`);
       }
       state.run = null;
     };
