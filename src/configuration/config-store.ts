@@ -1,5 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { CONFIG_KEY_NAMES, parseStoredConfig } from "./config.ts";
 import type { StoredConfig } from "./config.ts";
 
@@ -33,7 +32,7 @@ export function readStoredConfig(path: string): StoredConfig {
   return stored;
 }
 
+// The folder must already exist; ensureTermshotDir makes it with its .gitignore.
 export function writeStoredConfig(path: string, stored: StoredConfig): void {
-  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(nest(stored), null, 2)}\n`);
 }

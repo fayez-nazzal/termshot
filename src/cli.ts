@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { effectiveConfig, setConfigValue, unsetConfigValue } from "./configuration/config.ts";
@@ -133,9 +133,13 @@ function runConfig(args: string[]): void {
   } catch (e) {
     fail("usage-error", "config", (e as Error).message);
   }
-  if (parsed.command.action !== "show") {
+  // Only set creates .termshot/; unset rewrites a config file that already exists.
+  const creates = parsed.command.action === "set";
+  if (creates || (parsed.command.action === "unset" && existsSync(path))) {
     try {
-      ensureTermshotDir(root);
+      if (creates) {
+        ensureTermshotDir(root);
+      }
       writeStoredConfig(path, next);
     } catch (e) {
       fail("environment-error", "config", (e as Error).message);

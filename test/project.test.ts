@@ -53,6 +53,17 @@ test("ensureTermshotDir leaves an existing folder without a .gitignore alone", (
   expect(existsSync(join(tmp, ".termshot", ".gitignore"))).toBe(false);
 });
 
+test("the live probe counts only a .termshot folder, not a plain file", () => {
+  const tmp = tempDir();
+  writeFileSync(join(tmp, ".termshot"), "");
+  expect(liveProjectProbe.exists(join(tmp, ".termshot"))).toBe(false);
+  expect(findProjectRoot(tmp, liveProjectProbe)).toBeNull();
+  const other = tempDir();
+  mkdirSync(join(other, ".termshot"));
+  expect(liveProjectProbe.exists(join(other, ".termshot"))).toBe(true);
+  expect(liveProjectProbe.exists(join(other, "missing"))).toBe(false);
+});
+
 test("the live probe asks git for the top-level and gives null outside a repo", () => {
   const repo = join(import.meta.dir, "..");
   expect(liveProjectProbe.gitTopLevel(join(repo, "src"))).toBe(realpathSync(repo));

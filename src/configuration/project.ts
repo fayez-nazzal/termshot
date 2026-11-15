@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 const TERMSHOT_DIR = ".termshot";
@@ -59,4 +59,15 @@ function gitTopLevel(cwd: string): string | null {
   return result;
 }
 
-export const liveProjectProbe: ProjectProbe = { exists: existsSync, gitTopLevel };
+// Only a folder named .termshot marks a project, never a plain file.
+function isDirectory(path: string): boolean {
+  let result = false;
+  try {
+    result = statSync(path).isDirectory();
+  } catch {
+    result = false;
+  }
+  return result;
+}
+
+export const liveProjectProbe: ProjectProbe = { exists: isDirectory, gitTopLevel };

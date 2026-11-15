@@ -50,7 +50,13 @@ test("a stored config with an unknown key or a bad value fails loudly", () => {
 });
 
 test("a flat dotted key in the file is rejected, so there is one way to write it", () => {
-  expect(() => parseStoredConfig({ "font.size": 20 })).toThrow(/"font.size" must be nested/);
+  expect(() => parseStoredConfig({ "font.size": 20 })).toThrow('config key "font.size" must be nested in the file, like {"font":{"size":18}}');
+  expect(() => parseStoredConfig({ "prompt.show": false })).toThrow('like {"prompt":{"show":true}}');
+});
+
+test("a dotted name that is not a config key is just unknown", () => {
+  expect(() => parseStoredConfig({ "foo.bar": 1 })).toThrow('unknown config key "foo.bar"');
+  expect(() => parseStoredConfig({ font: { "a.b": 1 } })).toThrow('unknown config key "font.a.b"');
 });
 
 test("unknown nested key is rejected with its dotted name", () => {
@@ -116,6 +122,14 @@ test("config show from a plain folder writes nothing and reports where set would
   expect(readdirSync(tmp)).toEqual([]);
 });
 
+test("config unset from a plain folder creates nothing", () => {
+  const tmp = tempDir();
+  const unset = cli(["config", "unset", "theme"], tmp);
+  expect(unset.exitCode).toBe(0);
+  expect(JSON.parse(unset.stdout).config).toEqual(effectiveConfig({}));
+  expect(readdirSync(tmp)).toEqual([]);
+});
+
 test("termshot config set/unset in a subfolder uses the nearest .termshot and prints one JSON line", () => {
   const tmp = tempDir();
   mkdirSync(join(tmp, ".termshot"));
@@ -164,4 +178,9 @@ test("a broken config file stops a capture with a usage error that names the fil
   expect(record.errors[0].step).toBe("config");
   expect(record.errors[0].message).toContain(join(tmp, ".termshot", "config.json"));
   expect(record.errors[0].message).toContain('unknown config key "font.colour"');
+});
+
+test("writeStoredConfig never creates the folder", () => {
+  const path = join(tempDir(), ".termshot", "config.json");
+  expect(() => writeStoredConfig(path, { theme: "light" })).toThrow();
 });

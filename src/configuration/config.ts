@@ -54,11 +54,18 @@ function isKeyGroup(name: string): boolean {
   return CONFIG_KEY_NAMES.some((key) => key.startsWith(`${name}.`));
 }
 
+// How a dotted key looks in the file, with its default as the value:
+// `font.size` gives {"font":{"size":18}}.
+function nestedExample(key: ConfigKey): string {
+  const nested = key.split(".").reduceRight<unknown>((inner, segment) => ({ [segment]: inner }), defaultValue(key));
+  return JSON.stringify(nested);
+}
+
 function collect(raw: Record<string, unknown>, prefix: string, stored: StoredConfig): void {
   for (const [name, value] of Object.entries(raw)) {
     const path = `${prefix}${name}`;
-    if (name.includes(".")) {
-      throw new Error(`config key ${JSON.stringify(path)} must be nested in the file, like {"font":{"size":18}}`);
+    if (name.includes(".") && isConfigKey(path)) {
+      throw new Error(`config key ${JSON.stringify(path)} must be nested in the file, like ${nestedExample(path)}`);
     } else if (!isConfigKey(path) && isKeyGroup(path) && isPlainObject(value)) {
       collect(value, `${path}.`, stored);
     } else {
