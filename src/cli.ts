@@ -5,7 +5,8 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { effectiveConfig, setConfigValue, unsetConfigValue } from "./configuration/config.ts";
 import type { Config, StoredConfig } from "./configuration/config.ts";
-import { configPath, readStoredConfig, writeStoredConfig } from "./configuration/config-store.ts";
+import { readStoredConfig, writeStoredConfig } from "./configuration/config-store.ts";
+import { configPathFor, ensureTermshotDir, findProjectRoot, liveProjectProbe } from "./configuration/project.ts";
 import { processSignalPort, launchSession, terminateProcess, uniqueWindowTitle } from "./terminal-session/session.ts";
 import { waitForWindow } from "./terminal-session/window-lookup.ts";
 import { captureWindow } from "./screen-capture/screen-capture.ts";
@@ -20,7 +21,7 @@ import { exitCodeFor } from "./run-result/exit-codes.ts";
 import type { RunStatus } from "./run-result/result.ts";
 import { publisherFor } from "./publishing/registry.ts";
 import type { Publisher } from "./publishing/publisher.ts";
-import { terminalEmulator } from "./terminal-emulator/registry.ts";
+import { DEFAULT_TERMINAL_ID, terminalEmulator } from "./terminal-emulator/registry.ts";
 import type { TerminalEmulator } from "./terminal-emulator/terminal-emulator.ts";
 import { runTermshot } from "./run.ts";
 import type { RunPorts } from "./run.ts";
@@ -123,7 +124,8 @@ function runConfig(args: string[]): void {
   if (!parsed.ok) {
     fail("usage-error", "config", parsed.message);
   }
-  const path = configPath();
+  const root = findProjectRoot(process.cwd(), liveProjectProbe) ?? process.cwd();
+  const path = configPathFor(root);
   const stored = loadStoredConfig(path);
   let next: StoredConfig = stored;
   try {
@@ -133,6 +135,7 @@ function runConfig(args: string[]): void {
   }
   if (parsed.command.action !== "show") {
     try {
+      ensureTermshotDir(root);
       writeStoredConfig(path, next);
     } catch (e) {
       fail("environment-error", "config", (e as Error).message);
@@ -151,8 +154,11 @@ function runCapture(argv: string[]): void {
   } else if (flags.version) {
     process.stdout.write(`${VERSION}\n`);
   } else {
-    const config = effectiveConfig(loadStoredConfig(configPath()));
-    const terminal = flags.invocation.terminal ?? config.terminal;
+    const root = findProjectRoot(process.cwd(), liveProjectProbe);
+    const config = effectiveConfig(root != null ? loadStoredConfig(configPathFor(root)) : {});
+    // Temporary until the headless runner replaces this path: the terminal
+    // config key is gone, so only --terminal picks a non-default emulator.
+    const terminal = flags.invocation.terminal ?? DEFAULT_TERMINAL_ID;
     const publisherId = flags.invocation.publisher ?? config.publisher;
     const publisher = publisherFor(publisherId);
     if (flags.invocation.publishDest != null) {

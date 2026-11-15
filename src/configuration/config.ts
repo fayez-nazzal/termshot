@@ -1,44 +1,44 @@
-import { DEFAULT_PUBLISHER_ID, PUBLISHER_IDS, parsePublisherId } from "../publishing/registry.ts";
-import { DEFAULT_TERMINAL_ID, TERMINAL_IDS, parseTerminalId } from "../terminal-emulator/registry.ts";
+import { SHELL_SETTINGS } from "../shell/settings.ts";
+import { THEME_SETTINGS } from "../theme/settings.ts";
+import { RENDERING_SETTINGS } from "../rendering/settings.ts";
+import { COMMAND_RUN_SETTINGS } from "../command-run/settings.ts";
+import { PROMPT_SETTINGS } from "../prompt/settings.ts";
+import { PUBLISHING_SETTINGS } from "../publishing/settings.ts";
 
-interface ConfigKeyDefinition<T> {
-  readonly default: T;
-  readonly description: string;
-  parse(value: unknown): T;
-}
+// Every config key, in the order the spec's table lists them. A dotted key
+// such as `font.size` is stored nested: {"font":{"size":18}}.
+export const SETTINGS = {
+  ...SHELL_SETTINGS,
+  ...THEME_SETTINGS,
+  ...RENDERING_SETTINGS,
+  ...COMMAND_RUN_SETTINGS,
+  ...PROMPT_SETTINGS,
+  ...PUBLISHING_SETTINGS,
+};
 
-export const CONFIG_KEYS = {
-  terminal: {
-    default: DEFAULT_TERMINAL_ID,
-    description: `Terminal emulator captures run in: ${TERMINAL_IDS.join(", ")}`,
-    parse: parseTerminalId,
-  },
-  publisher: {
-    default: DEFAULT_PUBLISHER_ID,
-    description: `Where --publish uploads: ${PUBLISHER_IDS.join(", ")}`,
-    parse: parsePublisherId,
-  },
-} as const satisfies Record<string, ConfigKeyDefinition<unknown>>;
-
-export type ConfigKey = keyof typeof CONFIG_KEYS;
-export type Config = { [K in ConfigKey]: ReturnType<(typeof CONFIG_KEYS)[K]["parse"]> };
+export type ConfigKey = keyof typeof SETTINGS;
+export type Config = { [K in ConfigKey]: ReturnType<(typeof SETTINGS)[K]["parse"]> };
 export type StoredConfig = Partial<Config>;
 
-export const CONFIG_KEY_NAMES = Object.keys(CONFIG_KEYS) as ConfigKey[];
+export const CONFIG_KEY_NAMES = Object.keys(SETTINGS) as ConfigKey[];
+
+function isConfigKey(value: string): value is ConfigKey {
+  return Object.hasOwn(SETTINGS, value);
+}
 
 export function parseConfigKey(value: string): ConfigKey {
-  if (!Object.hasOwn(CONFIG_KEYS, value)) {
+  if (!isConfigKey(value)) {
     throw new Error(`unknown config key ${JSON.stringify(value)}; known keys: ${CONFIG_KEY_NAMES.join(", ")}`);
   }
-  return value as ConfigKey;
+  return value;
 }
 
 function parseValue<K extends ConfigKey>(key: K, value: unknown): Config[K] {
-  return CONFIG_KEYS[key].parse(value) as Config[K];
+  return SETTINGS[key].parse(value) as Config[K];
 }
 
 function defaultValue<K extends ConfigKey>(key: K): Config[K] {
-  return CONFIG_KEYS[key].default as Config[K];
+  return SETTINGS[key].default as Config[K];
 }
 
 function assign<K extends ConfigKey>(target: StoredConfig, key: K, value: Config[K]): void {
@@ -49,15 +49,31 @@ function isPlainObject(raw: unknown): raw is Record<string, unknown> {
   return raw != null && typeof raw === "object" && !Array.isArray(raw);
 }
 
+// A name that some dotted key starts with, like `font` for `font.size`.
+function isKeyGroup(name: string): boolean {
+  return CONFIG_KEY_NAMES.some((key) => key.startsWith(`${name}.`));
+}
+
+function collect(raw: Record<string, unknown>, prefix: string, stored: StoredConfig): void {
+  for (const [name, value] of Object.entries(raw)) {
+    const path = `${prefix}${name}`;
+    if (name.includes(".")) {
+      throw new Error(`config key ${JSON.stringify(path)} must be nested in the file, like {"font":{"size":18}}`);
+    } else if (!isConfigKey(path) && isKeyGroup(path) && isPlainObject(value)) {
+      collect(value, `${path}.`, stored);
+    } else {
+      const key = parseConfigKey(path);
+      assign(stored, key, parseValue(key, value));
+    }
+  }
+}
+
 export function parseStoredConfig(raw: unknown): StoredConfig {
   if (!isPlainObject(raw)) {
     throw new Error("config must be a JSON object");
   }
   const stored: StoredConfig = {};
-  for (const [name, value] of Object.entries(raw)) {
-    const key = parseConfigKey(name);
-    assign(stored, key, parseValue(key, value));
-  }
+  collect(raw, "", stored);
   return stored;
 }
 

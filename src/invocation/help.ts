@@ -1,11 +1,11 @@
-import { CONFIG_KEYS, CONFIG_KEY_NAMES } from "../configuration/config.ts";
+import { CONFIG_KEY_NAMES, SETTINGS } from "../configuration/config.ts";
 import { DEFAULT_EMBED_WIDTH } from "../publishing/publisher.ts";
 import { PUBLISHER_IDS, publisherFor } from "../publishing/registry.ts";
 import { TERMINAL_IDS } from "../terminal-emulator/registry.ts";
 import { DEFAULT_RUN_COLS, DEFAULT_RUN_ROWS } from "./flags.ts";
 
 function configKeyLines(): string {
-  return CONFIG_KEY_NAMES.map((key) => `  ${key.padEnd(22)}${CONFIG_KEYS[key].description} (default: ${CONFIG_KEYS[key].default})`).join("\n");
+  return CONFIG_KEY_NAMES.map((key) => `  ${key.padEnd(22)}${SETTINGS[key].description} (default: ${SETTINGS[key].default})`).join("\n");
 }
 
 function publisherLines(): string {

@@ -1,15 +1,24 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-import { parseStoredConfig } from "./config.ts";
+import { dirname } from "node:path";
+import { CONFIG_KEY_NAMES, parseStoredConfig } from "./config.ts";
 import type { StoredConfig } from "./config.ts";
 
-export function configPath(env: Record<string, string | undefined> = process.env, home: string = homedir()): string {
-  let base = join(home, ".config");
-  if (env.XDG_CONFIG_HOME != null && env.XDG_CONFIG_HOME !== "") {
-    base = env.XDG_CONFIG_HOME;
+// Turns dotted keys into nested objects, in the registry's key order:
+// {"font.size": 18} becomes {"font":{"size":18}}.
+function nest(stored: StoredConfig): Record<string, unknown> {
+  const nested: Record<string, unknown> = {};
+  for (const key of CONFIG_KEY_NAMES) {
+    if (stored[key] !== undefined) {
+      const segments = key.split(".");
+      let target = nested;
+      for (const segment of segments.slice(0, -1)) {
+        target[segment] ??= {};
+        target = target[segment] as Record<string, unknown>;
+      }
+      target[segments[segments.length - 1]!] = stored[key];
+    }
   }
-  return join(base, "termshot", "config.json");
+  return nested;
 }
 
 export function readStoredConfig(path: string): StoredConfig {
@@ -26,5 +35,5 @@ export function readStoredConfig(path: string): StoredConfig {
 
 export function writeStoredConfig(path: string, stored: StoredConfig): void {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(stored, null, 2)}\n`);
+  writeFileSync(path, `${JSON.stringify(nest(stored), null, 2)}\n`);
 }
