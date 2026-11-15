@@ -1,5 +1,4 @@
-import type { HighlightRole } from "../highlighting/highlighter.ts";
-import type { Token } from "../highlighting/highlighter.ts";
+import type { HighlightRole, Token } from "../highlighting/highlighter.ts";
 import type { PromptRole, PromptSegment } from "../prompt/prompt.ts";
 import type { CellColor, Row } from "../terminal-emulation/terminal-emulator.ts";
 
@@ -41,24 +40,35 @@ function padded(line: FrameCell[], cols: number): FrameCell[] {
 
 function headLines(pieces: { text: string; fg: Paint }[], cols: number): FrameCell[][] {
   const lines: FrameCell[][] = [[]];
+  const last = () => lines[lines.length - 1]!;
+  const breakLine = () => {
+    lines[lines.length - 1] = padded(last(), cols);
+    lines.push([]);
+  };
   for (const piece of pieces) {
     for (const { segment } of segmenter.segment(piece.text)) {
-      const width = Math.min(Bun.stringWidth(segment), 2) as 0 | 1 | 2;
-      if (width > 0) {
-        let line = lines[lines.length - 1]!;
-        if (line.length + width > cols) {
-          line = [];
-          lines[lines.length - 1] = padded(lines[lines.length - 1]!, cols);
-          lines.push(line);
+      if (segment === "\n" || segment === "\r\n") {
+        breakLine();
+      } else if (segment === "\t") {
+        const stop = Math.min((Math.floor(last().length / 8) + 1) * 8, cols);
+        while (last().length < stop) {
+          last().push(cell(" ", 1, piece.fg));
         }
-        line.push(cell(segment, width, piece.fg));
-        if (width === 2) {
-          line.push(cell("", 0, piece.fg));
+      } else {
+        const width = Math.min(Bun.stringWidth(segment), 2, cols) as 0 | 1 | 2;
+        if (width > 0) {
+          if (last().length + width > cols) {
+            breakLine();
+          }
+          last().push(cell(segment, width, piece.fg));
+          if (width === 2) {
+            last().push(cell(" ", 0, piece.fg));
+          }
         }
       }
     }
   }
-  lines[lines.length - 1] = padded(lines[lines.length - 1]!, cols);
+  lines[lines.length - 1] = padded(last(), cols);
   return lines;
 }
 

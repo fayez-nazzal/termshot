@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
 import type { Token } from "../src/highlighting/highlighter.ts";
-import { buildFrame, type FrameCell } from "../src/frame/frame.ts";
+import { buildFrame, type Frame, type FrameCell } from "../src/frame/frame.ts";
 import type { Cell, Row } from "../src/terminal-emulation/terminal-emulator.ts";
 
 const blank = { fg: { kind: "default" }, bg: { kind: "default" }, bold: false, dim: false, italic: false, underline: false, inverse: false } as const;
 const row = (s: string): Row => [...s.padEnd(10)].map((char): Cell => ({ char, width: 1, ...blank }));
 const tok = (text: string): Token => ({ text, role: "command" });
+const wide = (f: Frame, cols: number) => f.rows.every((r) => r.length === cols);
 const text = (r: FrameCell[]) => r.filter((c) => c.width !== 0).map((c) => c.char).join("").trimEnd();
 
 test("head line then output", () => {
@@ -24,18 +25,40 @@ test("tall output keeps the head and the last lines", () => {
   const out = Array.from({ length: 50 }, (_, i) => row(`l${i}`));
   const f = buildFrame({ prompt: [], command: [tok("x")], output: out, cols: 10, rows: 5 });
   expect(f.rows.map(text)).toEqual(["x", "l46", "l47", "l48", "l49"]);
+  expect(wide(f, 10)).toBe(true);
 });
 test("a command longer than rows lines is shown whole, output dropped", () => {
   const f = buildFrame({ prompt: [], command: [tok("y".repeat(35))], output: [row("out")], cols: 10, rows: 3 });
   expect(f.rows.map(text)).toEqual(["yyyyyyyyyy", "yyyyyyyyyy", "yyyyyyyyyy", "yyyyy"]);
+  expect(wide(f, 10)).toBe(true);
 });
 test("wide characters take two cells and wrap whole", () => {
   const f = buildFrame({ prompt: [], command: [tok("abc漢d")], output: [], cols: 4, rows: 30 });
   expect(f.rows.map(text)).toEqual(["abc", "漢d"]);
   expect(f.rows[0]![3]).toMatchObject({ char: " ", width: 1, fg: { kind: "default" } });
   expect(f.rows[1]!.slice(0, 3).map((c) => c.width)).toEqual([2, 0, 1]);
+  expect(f.rows[1]![1]!.char).toBe(" ");
+  expect(wide(f, 4)).toBe(true);
 });
 test("emoji are not split", () => {
   const f = buildFrame({ prompt: [], command: [tok("👍🏽")], output: [], cols: 4, rows: 30 });
   expect(f.rows.map(text)).toEqual(["👍🏽"]);
+  expect(wide(f, 4)).toBe(true);
+});
+test("newlines in the command break the head line", () => {
+  const f = buildFrame({ prompt: [], command: [tok("a\nb\r\nc")], output: [], cols: 5, rows: 30 });
+  expect(f.rows.map(text)).toEqual(["a", "b", "c"]);
+  expect(wide(f, 5)).toBe(true);
+});
+test("tabs expand to the next 8 column stop", () => {
+  const f = buildFrame({ prompt: [], command: [tok("a\tb")], output: [], cols: 12, rows: 30 });
+  expect(f.rows.map(text)).toEqual(["a       b"]);
+  expect(f.rows[0]![3]!.fg).toEqual({ kind: "highlight", role: "command" });
+  const narrow = buildFrame({ prompt: [], command: [tok("a\tb")], output: [], cols: 5, rows: 30 });
+  expect(narrow.rows.map(text)).toEqual(["a", "b"]);
+});
+test("a wide character at cols 1 becomes a width-1 cell", () => {
+  const f = buildFrame({ prompt: [], command: [tok("漢a")], output: [], cols: 1, rows: 30 });
+  expect(f.rows.map(text)).toEqual(["漢", "a"]);
+  expect(wide(f, 1)).toBe(true);
 });
