@@ -1,6 +1,6 @@
 import type { Highlighter, HighlightRole, Token } from "./highlighter.ts";
 
-const OPERATORS = ["||", "&&", ">>", "2>", "|", ";", "&", ">", "<", "(", ")"];
+const OPERATORS = ["2>>", "2>&", "||", "&&", ">>", "2>", ">&", "&>", "|", ";", "&", ">", "<", "(", ")"];
 const COMMAND_OPENERS = new Set(["||", "&&", "|", ";", "&", "("]);
 const WORD_BREAKS = new Set([" ", "\t", "|", ";", "&", "<", ">", "(", ")", "'", '"', "$"]);
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
@@ -50,6 +50,7 @@ function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
   let commandPosition = true;
   let atWordStart = true;
+  let inAssignmentValue: boolean = false;
   let index = 0;
   while (index < input.length) {
     const char = input[index]!;
@@ -59,16 +60,18 @@ function tokenize(input: string): Token[] {
       while (end < input.length && (input[end] === " " || input[end] === "\t")) end++;
       role = "whitespace";
       atWordStart = true;
+      inAssignmentValue = false;
     } else if (char === "#" && atWordStart) {
       end = input.length;
       role = "comment";
     } else {
-      const operator = OPERATORS.find((op) => input.startsWith(op, index) && (op !== "2>" || atWordStart));
+      const operator = OPERATORS.find((op) => input.startsWith(op, index) && (!op.startsWith("2") || atWordStart));
       if (operator !== undefined) {
         end = index + operator.length;
         role = "operator";
         commandPosition = COMMAND_OPENERS.has(operator) ? true : commandPosition;
         atWordStart = true;
+        inAssignmentValue = false;
       } else {
         if (char === "'" || char === '"') {
           end = quotedEnd(input, index);
@@ -80,8 +83,10 @@ function tokenize(input: string): Token[] {
           end = wordEnd(input, index);
           role = wordRole(input.slice(index, end), commandPosition);
         }
-        const keepsOpen = role === "variable" && ASSIGNMENT.test(input.slice(index, end));
-        commandPosition = keepsOpen ? commandPosition : false;
+        const isAssignment: boolean = role === "variable" && ASSIGNMENT.test(input.slice(index, end));
+        const attachedValue: boolean = inAssignmentValue && (role === "string" || role === "variable");
+        commandPosition = isAssignment || attachedValue ? commandPosition : false;
+        inAssignmentValue = isAssignment || attachedValue;
         atWordStart = false;
       }
     }

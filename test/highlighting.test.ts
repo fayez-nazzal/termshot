@@ -35,3 +35,18 @@ test("rulings: 2> only at word start, mid-word # stays in word, env keeps comman
     ["(", "operator"], ["a", "command"], [")", "operator"], [";", "operator"], ["b", "command"], ["&", "operator"], ["c", "command"],
   ]);
 });
+test("quoted or variable assignment values keep command position open", () => {
+  expect(roles(`FOO="a b" cmd x`)).toEqual([["FOO=", "variable"], ['"a b"', "string"], ["cmd", "command"], ["x", "argument"]]);
+  expect(roles("FOO=$HOME cmd")).toEqual([["FOO=", "variable"], ["$HOME", "variable"], ["cmd", "command"]]);
+});
+test("fd redirects never open command position", () => {
+  expect(roles("ls 2>&1 | tee out")).toEqual([
+    ["ls", "command"], ["2>&", "operator"], ["1", "argument"], ["|", "operator"], ["tee", "command"], ["out", "argument"],
+  ]);
+  expect(roles("a &> f 2>> g >& h")).toEqual([
+    ["a", "command"], ["&>", "operator"], ["f", "argument"], ["2>>", "operator"], ["g", "argument"], [">&", "operator"], ["h", "argument"],
+  ]);
+  for (const s of ["ls 2>&1", "a&>b 2>>c >&d", "x2>&1"]) {
+    expect(defaultHighlighter().tokenize(s).map((t) => t.text).join("")).toBe(s);
+  }
+});
