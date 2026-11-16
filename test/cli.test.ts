@@ -52,6 +52,32 @@ test("--cols and --rows are read when passed", () => {
   expect(r.ok && [r.invocation.cols, r.invocation.rows]).toEqual([80, 10]);
 });
 
+for (const [flag, raw] of [["--cols", "1000000"], ["--rows", "1001"], ["--cols", "0"], ["--rows", "2.5"]] as const) {
+  test(`${flag} ${raw} is out of range, with the same rule as the config`, () => {
+    expect(parseFlags(["--run", "x", flag, raw])).toEqual({ ok: false, message: `${flag} must be an integer from 1 to 1000, got "${raw}"` });
+  });
+}
+
+test("--cols and --rows accept the 1000 limit", () => {
+  const r = parseFlags(["--run", "x", "--cols", "1000", "--rows", "1000"]);
+  expect(r.ok && [r.invocation.cols, r.invocation.rows]).toEqual([1000, 1000]);
+});
+
+test("an out-of-range --cols ends the run with a usage error at step flags", () => {
+  const proc = Bun.spawnSync(["bun", "src/cli.ts", "--run", "echo hi", "--cols", "1000000"]);
+  expect(proc.exitCode).toBe(2);
+  const record = JSON.parse(new TextDecoder().decode(proc.stdout));
+  expect([record.status, record.errors]).toEqual(["usage-error", [{ step: "flags", message: '--cols must be an integer from 1 to 1000, got "1000000"' }]]);
+});
+
+test("a removed flag's name used as a value is not a removed flag", () => {
+  const label = parseFlags(["--run", "x", "--publish", "7", "--publish-label", "settle"]);
+  expect(label.ok && label.invocation.publishLabel).toBe("settle");
+  const run = parseFlags(["--run", "list"]);
+  expect(run.ok && run.invocation.command).toBe("list");
+  expect(parseFlags(["--run", "x", "--window=3"])).toEqual({ ok: false, message: "--window was removed; termshot only supports --run" });
+});
+
 test("help describes the headless model and names the config file and every key", () => {
   const help = helpText("0.7.0");
   expect(help).toContain("built-in headless terminal");

@@ -1,4 +1,6 @@
 import { parseArgs } from "node:util";
+import { COMMAND_RUN_SETTINGS } from "../command-run/settings.ts";
+import type { Setting } from "../configuration/setting.ts";
 import { DEFAULT_EMBED_WIDTH } from "../publishing/publisher.ts";
 import { parsePublisherId } from "../publishing/registry.ts";
 import type { Invocation } from "./invocation.ts";
@@ -7,11 +9,13 @@ const REMOVED_FLAGS = ["annotate", "copy", "window-pick", "box", "marker", "list
 
 export type FlagsResult = { ok: true; invocation: Invocation; help: boolean; version: boolean } | { ok: false; message: string };
 
+// Only tokens that start with "-" are flags; a value such as the "settle" in
+// --publish-label settle is not.
 function findRemovedFlag(argv: string[]): string | undefined {
   let result: string | undefined;
   for (const raw of argv) {
     const name = raw.replace(/^--?/, "").split("=")[0]!;
-    if (result == null && REMOVED_FLAGS.includes(name)) {
+    if (result == null && raw.startsWith("-") && REMOVED_FLAGS.includes(name)) {
       result = name;
     }
   }
@@ -24,6 +28,17 @@ function intFlag(name: string, raw: string): number {
     throw new Error(`--${name} must be a positive integer`);
   }
   return n;
+}
+
+// The same rule, and message, as the config key of the same name.
+function settingFlag(name: string, setting: Setting<number>, raw: string): number {
+  let result: number;
+  try {
+    result = setting.parse(raw);
+  } catch (e) {
+    throw new Error(`--${name} ${(e as Error).message}`);
+  }
+  return result;
 }
 
 function parseArgv(argv: string[]) {
@@ -68,8 +83,8 @@ export function parseFlags(argv: string[]): FlagsResult {
         const invocation: Invocation = {
           command: values.run,
           output: values.output ?? null,
-          cols: values.cols != null ? intFlag("cols", values.cols) : null,
-          rows: values.rows != null ? intFlag("rows", values.rows) : null,
+          cols: values.cols != null ? settingFlag("cols", COMMAND_RUN_SETTINGS.cols, values.cols) : null,
+          rows: values.rows != null ? settingFlag("rows", COMMAND_RUN_SETTINGS.rows, values.rows) : null,
           publishDest: values.publish ?? null,
           publishSize: values["publish-size"] != null ? intFlag("publish-size", values["publish-size"]) : DEFAULT_EMBED_WIDTH,
           publishLabel: values["publish-label"] ?? null,

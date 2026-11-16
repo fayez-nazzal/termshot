@@ -178,7 +178,7 @@ The default prompt looks like `~/tools/termshot on main ❯ bun test`: the folde
 | `-h, --help` | Show help | |
 | `-v, --version` | Show version | |
 
-`--cols`, `--rows` and `--publish-size` each take a positive whole number. Flags beat the config for the run.
+`--cols` and `--rows` each take a whole number from 1 to 1000, the same range as the config keys. `--publish-size` takes a positive whole number. Flags beat the config for the run.
 
 That table is the whole flag set, plus the `config` command above. Anything else ends the run with exit code 2.
 
