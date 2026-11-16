@@ -1,16 +1,16 @@
 ---
 name: termshot
-description: Screenshot a terminal command to a PNG on macOS and get a JSON record with its path and sha256. Use for terminal evidence (PR screenshots of tests, builds, logs, CLI demos) or when asked to "termshot" or "capture this command". Not for web pages or app UI.
+description: Render a terminal command to a PNG in a built-in headless terminal and get a JSON record with its path and sha256. Use for terminal evidence (PR screenshots of tests, builds, logs, CLI demos) or when asked to "termshot" or "capture this command". Not for web pages or app UI.
 license: MIT
-compatibility: macOS only. Needs `termshot` on PATH, Ghostty or Alacritty in /Applications, and Screen Recording permission for the calling terminal.
+compatibility: Needs `termshot` on PATH. macOS.
 metadata:
   author: Fayez Nazzal
-  version: "0.6.1"
+  version: "0.7.0"
 ---
 
 # termshot
 
-Runs one command in a fresh terminal window, saves a PNG of it, and prints one JSON line on stdout.
+Runs one command in a built-in headless terminal, renders it to a PNG, and prints one JSON line on stdout. Nothing shows on screen.
 
 ## Capture
 
@@ -20,16 +20,15 @@ jq -r '.status, .command.exitStatus, .capture.path' /tmp/evidence.json
 ```
 
 - Pass an absolute `-o` path. The record echoes it back as given.
-- `--cols <n> --rows <n>` sets the grid (default 120x30).
-- The command must finish by itself within 60 seconds.
-- For a failing exit, use `--run "sh -c 'exit 3'"`. A bare trailing `exit` kills the wrapper and the run times out.
+- `--cols <n> --rows <n>` sets the grid for one run (default 120x30). `rows` is the most rows shown.
+- The command must finish by itself within 60 seconds. It gets one end-of-file on stdin, so feed input from a file or pipe inside `--run`.
 
 ## Read the result
 
 - `status` is the run verdict. `ok` and `command-failed` both mean the PNG was written.
 - `command.exitStatus` is the captured command's exit status. `exitCode` is termshot's own exit code. Judge the command by `command.exitStatus`.
 - `capture.path`, `capture.sha256` describe the PNG.
-- `terminal.emulator` is the terminal used.
+- `terminal.shell` is the shell used. `terminal.rows` is the height actually rendered.
 - On failure, `errors[]` holds `{step, message}`.
 
 ## Publish
@@ -38,10 +37,12 @@ Only when the user asks to upload or post the screenshot, add `--publish <dest>`
 
 ## When it fails
 
-- `environment-error`, step `terminal-session`, "is not installed": the configured terminal is missing. Retry once with `--terminal ghostty` or `--terminal alacritty`, and tell the user. Leave their config as is.
-- `environment-error`, step `screen-capture`: Screen Recording permission is missing. Ask the user to grant it in System Settings, Privacy & Security, Screen Recording, then restart their terminal.
-- `usage-error`, step `config`: their config file is invalid. Show them the message.
-- `timeout`: the command ran past 60 seconds or ended in `exit`.
+- `environment-error`, step `shell`, "was not found on PATH": the configured shell is missing. Tell the user. They can install it or run `termshot config set shell <name>`. Leave their config as is.
+- `environment-error`, step `command-run` or `artifact`: the terminal could not start, or the output path could not be written. Check the `-o` folder and show the user the message.
+- `internal-error`, step `rendering`: no PNG was written. Re-run once, then show the user the message.
+- `usage-error`, step `config`: their `.termshot/config.json` is invalid. Show them the message.
+- `timeout`: the command ran past 60 seconds or waited for input. No PNG was written.
+- `command-failed` with `command.exitStatus` 137: termshot was interrupted and killed the command.
 - `publish-failed`: the PNG is still on disk; the upload failed. Show the user the message.
 
 ## Report

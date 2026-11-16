@@ -41,7 +41,7 @@ test("unset removes only that key and does not mutate the input", () => {
 });
 
 test("a stored config with an unknown key or a bad value fails loudly", () => {
-  expect(() => parseStoredConfig({ terminal: "alacritty" })).toThrow(/unknown config key "terminal"/);
+  expect(() => parseStoredConfig({ terminal: "any" })).toThrow(/unknown config key "terminal"/);
   expect(() => parseStoredConfig({ theme: "sepia" })).toThrow(/unknown theme/);
   expect(() => parseStoredConfig({ font: { size: 9 } })).toThrow(/10 to 48/);
   expect(() => parseStoredConfig({ font: 18 })).toThrow(/unknown config key "font"/);
@@ -147,7 +147,7 @@ test("termshot config set/unset in a subfolder uses the nearest .termshot and pr
   expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({});
 });
 
-test("a capture with a malformed --publish dest fails as a usage error before any window opens", () => {
+test("a capture with a malformed --publish dest fails as a usage error before the command runs", () => {
   const tmp = tempDir();
   cli(["config", "set", "publisher", "rclone"], tmp);
   const run = cli(["--run", "echo hi", "-o", "/tmp/never.png", "--publish", "PR-Shots/"], tmp);
@@ -162,7 +162,7 @@ test("termshot config set with a bad value is a usage error and writes nothing",
   const bad = cli(["config", "set", "font.size", "9"], tmp);
   expect(bad.exitCode).toBe(2);
   expect(JSON.parse(bad.stdout)).toMatchObject({ status: "usage-error", errors: [{ step: "config" }] });
-  const unknown = cli(["config", "set", "terminal", "ghostty"], tmp);
+  const unknown = cli(["config", "set", "terminal", "any"], tmp);
   expect(unknown.exitCode).toBe(2);
   expect(JSON.parse(unknown.stdout)).toMatchObject({ status: "usage-error", errors: [{ step: "config", message: expect.stringContaining('unknown config key "terminal"') }] });
   expect(readdirSync(tmp)).toEqual([]);

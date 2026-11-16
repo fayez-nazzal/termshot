@@ -37,6 +37,14 @@ body:
       description: Output of `termshot --version`.
     validations:
       required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Config
+      description: Output of `termshot config`, run in the same folder. It shows the shell and every other setting.
+      render: json
+    validations:
+      required: true
   - type: input
     id: os
     attributes:

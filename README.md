@@ -2,19 +2,26 @@
 
 [![CI](https://github.com/fayez-nazzal/termshot/actions/workflows/ci.yml/badge.svg)](https://github.com/fayez-nazzal/termshot/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-`termshot` runs one command in a fresh terminal window on macOS (Ghostty or Alacritty), captures that window to a PNG, and prints a JSON record of the run on stdout.
+`termshot` runs one command in a built-in headless terminal, renders the result to a PNG, and prints a JSON record of the run on stdout.
 
 Use it to produce evidence images for pull requests, issues and docs, and to let an agent read the result without opening the image.
 
 `termshot` is built to be called by an AI coding agent. Every run prints one JSON line with `capture.path`, `capture.sha256` and a `status`, backed by the exit-code table below, so an agent can prove the PNG exists without ever loading the bytes. See `AGENTS.md` for the recipes and the traps.
 
+Nothing shows on screen during a capture. No terminal app, no window and no permission prompt are involved. The terminal emulator, the renderer and the font are all inside the `termshot` binary, and it needs no network access.
+
 ## Requirements
 
-- macOS, for the built in `screencapture` tool.
-- [Bun](https://bun.sh) to install and run.
-- Screen Recording permission for your terminal, under `System Settings` then `Privacy & Security`.
-- One supported terminal in `/Applications`: [Ghostty](https://ghostty.org) (the default) or [Alacritty](https://alacritty.org). See [Choosing a terminal](#choosing-a-terminal).
+- macOS.
+- [Bun](https://bun.sh), only to build from source.
+- The shell named by the `shell` config key on your `PATH`. The default is `zsh`, which macOS ships.
 - Only for `--publish`: [rclone](https://rclone.org) with a Google Drive remote, or the [GitHub CLI](https://cli.github.com) logged in. See [Publishing](#publishing).
+
+## Upgrading to 0.7
+
+- The terminal-app backend was removed. termshot draws the terminal itself.
+- `--terminal` and `--settle` were removed. Passing either one is a `usage-error`.
+- `~/.config/termshot/config.json` is no longer read. Config lives in each project now. If you saved `publisher` there, run `termshot config set publisher <name>` in each project that needs it.
 
 ## Install
 
@@ -98,28 +105,26 @@ See `AGENTS.md` for the full recipes.
 
 ```sh
 termshot --run "ls -la"                        # capture a command
-termshot --run "ls -la" -o shot.png            # write to a chosen path
-termshot --run "htop" --cols 160 --rows 45     # use a bigger terminal grid
-termshot --run "ls" --settle 1000              # wait longer before capturing
-termshot --run "ls" --publish 42              # post the capture to PR 42 (publisher gh)
-termshot --run "ls" --terminal alacritty       # use another terminal for one run
+termshot --run "ls -la" -o /tmp/shot.png       # write to a chosen path
+termshot --run "git log --oneline" --cols 80   # use a narrower grid
+termshot --run "bun test" --rows 60            # show up to 60 rows
+termshot --run "ls" --publish 42               # post the capture to PR 42 (publisher gh)
 ```
 
 `--run` is required. Without it the run ends with a usage error and exit code 2.
 
-The default output path is `~/termshot/<timestamp>.png`.
+The default output path is `.termshot/captures/<timestamp>.png` inside a project, and `~/termshot/<timestamp>.png` outside one.
 
-## Configuration
+## Project config
 
-### Choosing a terminal
+Each project keeps its own look in `.termshot/config.json`. Commit that file, so everyone on the team gets the same captures.
 
-Supported terminals: `ghostty` (default) and `alacritty`. Save your choice once:
+### Where the config lives
 
-```sh
-termshot config set terminal alacritty
-```
-
-Override it for a single run with `--terminal <name>`. The flag beats the config, and the config beats the default.
+- The project root is the nearest folder, from the current folder upwards, that holds a `.termshot/` folder. Failing that, it is the git top level.
+- Reading the config and `termshot config set` use the same rule, so `set` writes where later runs read.
+- Outside any project, a capture uses the defaults, creates nothing, and writes to `~/termshot/<timestamp>.png`.
+- `termshot config set` creates `.termshot/` in the project root or, outside a project, in the current folder. A capture without `-o` inside a project creates it too, to hold `captures/`. When termshot makes the folder, it also writes `.termshot/.gitignore` with `captures/` in it, so captures stay out of git. `termshot config unset` never creates the folder.
 
 ### Config commands
 
@@ -131,23 +136,41 @@ Override it for a single run with `--terminal <name>`. The flag beats the config
 
 | Key | Values | Default |
 |-----|--------|---------|
-| `terminal` | `ghostty`, `alacritty` | `ghostty` |
+| `shell` | `zsh`, `bash`, `sh` | `zsh` |
+| `theme` | `dark`, `light` | `dark` |
+| `font.size` | Whole number from 10 to 48 | `18` |
+| `cols` | Positive whole number | `120` |
+| `rows` | Positive whole number. The most rows shown; the image is cut to the rows actually used | `30` |
+| `prompt.show` | `true`, `false` | `true` |
+| `prompt.directory` | `full`, `short` (last folder only), `none` | `full` |
+| `prompt.git` | `true`, `false` | `true` |
+| `prompt.symbol` | Any text of 1 to 4 characters | `❯` |
 | `publisher` | `rclone`, `gh` | `rclone` |
 
-The config lives at `$XDG_CONFIG_HOME/termshot/config.json`, or `~/.config/termshot/config.json` when that variable is unset. An unknown key or value in the file stops every run with a `usage-error` that names the file.
+Dotted keys are stored nested: `font.size` is `{"font":{"size":18}}` in the file. An unknown key or a bad value in the file stops every run with a `usage-error` at step `config` that names the file.
 
-Captures use your own terminal config for fonts and colours. termshot only overrides the window size, decorations and the command to run.
+### Examples
+
+```sh
+termshot config set shell bash               # run commands in bash
+termshot config set theme light              # light background
+termshot config set font.size 22             # bigger text
+termshot config set prompt.directory short   # show only the last folder
+termshot config set prompt.git false         # hide the git branch
+termshot config set prompt.symbol '$'        # a classic prompt
+termshot config set prompt.show false        # show only the command, no prompt
+```
+
+The default prompt looks like `~/tools/termshot on main ❯ bun test`: the folder with your home shortened to `~`, the git branch when there is one, the symbol, then the command with syntax highlighting.
 
 ## Options
 
 | Flag | What it does | Default |
 |------|--------------|---------|
-| `--run <command>` | Run the command in a fresh terminal window and capture it | required |
-| `-o, --output <path>` | Output PNG path | `~/termshot/<timestamp>.png` |
-| `--terminal <name>` | Terminal for this run only: `ghostty` or `alacritty` | the `terminal` config value |
-| `--settle <ms>` | Wait after the window appears, before capturing | `500` |
-| `--cols <n>` | Width of the window in terminal columns | `120` |
-| `--rows <n>` | Height of the window in terminal rows | `30` |
+| `--run <command>` | Run the command in the headless terminal and render it | required |
+| `-o, --output <path>` | Output PNG path | `.termshot/captures/<timestamp>.png` in a project, else `~/termshot/<timestamp>.png` |
+| `--cols <n>` | Terminal width in columns | the `cols` config value |
+| `--rows <n>` | Most terminal rows shown | the `rows` config value |
 | `--publish <dest>` | Upload the PNG publicly and put a Markdown embed in the record. See [Publishing](#publishing) | none |
 | `--publisher <name>` | Publisher for this run only: `rclone` or `gh`. Needs `--publish` | the `publisher` config value |
 | `--publish-size <px>` | Long edge width for the embed. `rclone` only | `2560` |
@@ -155,40 +178,40 @@ Captures use your own terminal config for fonts and colours. termshot only overr
 | `-h, --help` | Show help | |
 | `-v, --version` | Show version | |
 
-`--settle`, `--cols`, `--rows` and `--publish-size` each take a positive whole number.
+`--cols`, `--rows` and `--publish-size` each take a positive whole number. Flags beat the config for the run.
 
 That table is the whole flag set, plus the `config` command above. Anything else ends the run with exit code 2.
 
-These eight flags were removed and now report that they were removed: `--annotate`, `--copy`, `--window-pick`, `--box`, `--marker`, `--list`, `--window` and `--stdout`.
+These ten flags were removed and report that they were removed: `--annotate`, `--copy`, `--window-pick`, `--box`, `--marker`, `--list`, `--window`, `--stdout`, `--terminal` and `--settle`.
 
 ## Output
 
 Every run prints one JSON line on stdout, success or failure.
 
-Real record from `termshot --run "echo hi" -o demo.png` on this machine:
+Real record from `termshot --run "echo hi" -o /tmp/ts-demo.png` on this machine:
 
 ```json
-{"tool":"termshot","version":"0.5.1","status":"ok","exitCode":0,"command":{"argv":["echo hi"],"exitStatus":0,"durationMs":1,"timedOut":false},"capture":{"path":"/tmp/demo.png","bytes":42664,"width":1936,"height":1036,"sha256":"544d9884c49949b47a3f78ea9c26679f6c6585cb2c4148f4feb40c3bdb3acad8"},"terminal":{"emulator":"ghostty","cols":120,"rows":30},"publish":{"requested":false,"publisher":null,"url":null,"markdown":null,"verified":false},"errors":[]}
+{"tool":"termshot","version":"0.7.0","status":"ok","exitCode":0,"command":{"argv":["echo hi"],"exitStatus":0,"durationMs":17,"timedOut":false},"capture":{"path":"/tmp/ts-demo.png","bytes":15069,"width":2720,"height":236,"sha256":"4b1db65ffc4d259455345ede89afb8577f377d19841b7245126c1da07eb91166"},"terminal":{"shell":"zsh","cols":120,"rows":2},"publish":{"requested":false,"publisher":null,"url":null,"markdown":null,"verified":false},"errors":[]}
 ```
 
 Notes on that record:
 
-- `capture.path` is absolute, and `sha256` is the hash of the written PNG.
-- The `terminal` block reports which terminal ran the command in `emulator`, and the grid the window was launched with, so `cols` and `rows` match the `--cols` and `--rows` values used for the run. `emulator` is set even when the run fails.
+- `capture.path` is the `-o` path as given, and `sha256` is the hash of the written PNG. `width` and `height` are the real pixel size.
+- The `terminal` block names the `shell` the command ran in, set even when the run fails. `cols` is the width used. `rows` is the visible height actually rendered, which can be less than the `rows` asked for. Both are `null` when nothing was rendered.
 - stderr carries the human lines: one per entry in `errors`, then `termshot: wrote <path> (<n> bytes)` when a file was written.
 
 ## Exit codes
 
 | Code | Status | Meaning |
 |------|--------|---------|
-| 0 | `ok` | Capture written |
-| 1 | `command-failed` | The command ran and exited non zero |
-| 2 | `usage-error` | Bad or missing flags |
-| 3 | `environment-error` | The machine or the terminal could not do the job |
-| 4 | `timeout` | The command did not finish in time |
-| 5 | `truncated` | Reserved. No run produces this code today |
-| 6 | `publish-failed` | Upload step failed |
-| 7 | `internal-error` | The PNG was written but could not be read back |
+| 0 | `ok` | The PNG was written and the command succeeded |
+| 1 | `command-failed` | The PNG was written and the command exited non zero |
+| 2 | `usage-error` | Bad or missing flags, or a bad config file. Nothing ran |
+| 3 | `environment-error` | The shell is missing, the terminal could not start, or the output folder could not be written |
+| 4 | `timeout` | The command did not finish in 60 seconds |
+| 5 | `truncated` | Reserved. No run produces this code |
+| 6 | `publish-failed` | The PNG was written but the upload failed |
+| 7 | `internal-error` | Rendering failed and no PNG was written, or the PNG header could not be read back |
 
 ## Publishing
 
@@ -206,30 +229,26 @@ termshot --run "bun test" -o /tmp/tests.png --publish 42
 
 `gh` needs no storage repo: GitHub hosts the image as a PR attachment, visible to anyone who can see the PR.
 
-A bad `<dest>` for the chosen publisher fails with `usage-error` before any window opens.
+A bad `<dest>` for the chosen publisher fails with `usage-error` before the command runs.
 
-## How a capture stays clean
+## How a headless run works
 
-A capture shows the command output and nothing else. Four defaults make that true.
-
-- The window opens with no titlebar, so the internal window handle never shows.
-- A short settle and a screen clear remove the shell login banner.
-- The terminal is told not to wait for a keypress, so no `Process exited` banner appears.
-- The rows under the output are erased and the cursor is hidden.
-
-`termshot` closes the window and the process it started once the capture is written, whether the capture worked or not.
-
-If you run a tiling window manager, it may force the window to a size you did not ask for. Add a rule that floats windows titled `termshot-*`. For AeroSpace, put this first in `on-window-detected`, since the first match wins:
-
-```toml
-{ if.window-title-regex-substring = '^termshot-', run = ['layout floating'] },
-```
+- termshot runs the command as `<shell> -c <command>` in a pseudo-terminal of `cols` by `rows`, in the current folder. Programs see a real terminal, so they keep their colors and layout.
+- The command gets your environment plus `TERM=xterm-256color`, `COLORTERM=truecolor`, `FORCE_COLOR=1`, `CLICOLOR_FORCE=1`, `COLUMNS` and `LINES`, so tools print color even though nobody is watching.
+- Pagers are turned off with `PAGER=cat`, `GIT_PAGER=cat` and `MANPAGER=cat`, so `git log` or `man` cannot wait for a key.
+- termshot sends one end-of-file on stdin right after the start, so a command that reads stdin gets nothing and moves on.
+- The output goes through a terminal emulator in memory. The image shows the prompt line and the highlighted command at the top, then the output exactly as the terminal drew it. termshot never rewrites or recolors the output.
+- When the output is taller than `rows`, the prompt line stays at the top and the last lines of output show below it, as a terminal would after scrolling.
+- The image is rendered at 2x with the bundled JetBrains Mono font. The cursor is never drawn.
+- If you interrupt termshot with Ctrl-C or `SIGTERM`, it kills the command and still renders what it printed. The record shows `command-failed` with `command.exitStatus` `137`.
 
 ## Limits
 
-- The window must appear within 15 seconds.
-- The command must finish within 60 seconds.
-- Neither limit is configurable.
+- The command must finish by itself within 60 seconds. The limit is not configurable.
+- The command must not be interactive. A command that reads stdin twice, like `cat; cat`, waits until the timeout, because termshot sends only one end-of-file.
+- Characters missing from the bundled font, such as emoji and CJK, draw as blank boxes.
+- A full-screen program still on its alternate screen when it exits shows only its last screen. A screen clear shows only what came after it.
+- Output over 10000 lines keeps only the last 10000.
 - `--version` prints the `version` field from `package.json`.
 
 ## Development

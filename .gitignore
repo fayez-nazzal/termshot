@@ -6,3 +6,4 @@ build/
 .DS_Store
 *.png
 !test/fixtures/*.png
+*.bun-build

@@ -1,7 +1,7 @@
 {
   "name": "termshot",
-  "version": "0.6.1",
-  "description": "CLI tool for AI coding agents. Runs a command in a fresh Ghostty or Alacritty window, captures it to a PNG, and prints a JSON record with a sha256.",
+  "version": "0.7.0",
+  "description": "CLI tool for AI coding agents. Runs a command in a built-in headless terminal, renders it to a PNG, and prints a JSON record with a sha256.",
   "author": {
     "name": "Fayez Nazzal"
   },

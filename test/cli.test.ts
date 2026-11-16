@@ -37,8 +37,9 @@ test("--help documents the config command and the publisher flag", () => {
   expect(text).toContain("termshot config set <key> <value>");
   expect(text).toContain("--publisher <name>");
   expect(text).toContain("pull request number, URL or branch");
-  expect(text).not.toContain("--terminal");
-  expect(text).not.toContain("--settle");
+  for (const removedFlag of REMOVED_FLAGS) {
+    expect(text).not.toContain(removedFlag);
+  }
 });
 
 test("--cols and --rows stay null when not passed", () => {
