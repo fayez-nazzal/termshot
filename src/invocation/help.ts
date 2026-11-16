@@ -26,8 +26,10 @@ USAGE
 
 OPTIONS
       --run <command>     Run the command and render its output
-  -o, --output <path>     Output PNG path (default: .termshot/captures/<timestamp>.png
-                          in a project, else ~/termshot/<timestamp>.png)
+  -o, --output <path>     Output PNG path, replaced if it exists (default:
+                          .termshot/captures/<timestamp>.png in a project, else
+                          ~/termshot/<timestamp>.png; <timestamp> is
+                          YYYYMMDD-HHMMSS-mmm, and a taken name gets -1, -2, ...)
       --cols <n>          Terminal width in columns (default: ${SETTINGS.cols.default})
       --rows <n>          Most terminal rows shown (default: ${SETTINGS.rows.default})
       --publish <dest>    Upload the written PNG and put a Markdown

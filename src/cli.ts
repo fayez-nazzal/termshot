@@ -6,7 +6,8 @@ import { effectiveConfig, setConfigValue, unsetConfigValue } from "./configurati
 import type { Config, StoredConfig } from "./configuration/config.ts";
 import { readStoredConfig, writeStoredConfig } from "./configuration/config-store.ts";
 import { configPathFor, defaultCapturePath, ensureTermshotDir, findProjectRoot, liveProjectProbe } from "./configuration/project.ts";
-import { writeArtifact } from "./artifact/artifact.ts";
+import { writeArtifact, writeNewArtifact } from "./artifact/artifact.ts";
+import type { ArtifactRecord } from "./artifact/artifact.ts";
 import { defaultCommandRunner } from "./command-run/registry.ts";
 import { commandEnv } from "./command-run/environment.ts";
 import { defaultHighlighter } from "./highlighting/registry.ts";
@@ -38,15 +39,29 @@ export const VERSION = packageJson.version;
 
 const TOOL = "termshot";
 
-function timestamp(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+// Local time as YYYYMMDD-HHMMSS-mmm.
+export function captureStamp(d: Date): string {
+  const p = (n: number, width = 2) => String(n).padStart(width, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${p(d.getMilliseconds(), 3)}`;
 }
 
-// projectRoot is set when the capture goes to the project's default folder:
-// .termshot/ is made only then, and only once there is an image to write.
-function livePorts(shell: ShellId, publisher: Publisher, projectRoot: string | null): RunPorts {
+// Where a capture goes. exclusive is set for the default path, so two runs
+// in the same millisecond never overwrite each other; an explicit -o path is
+// replaced. projectRoot is set when the capture goes to the project's default
+// folder: .termshot/ is made only then, and only once there is an image.
+export interface CaptureTarget {
+  exclusive: boolean;
+  projectRoot: string | null;
+}
+
+export function writeCapture(path: string, data: Uint8Array, target: CaptureTarget): ArtifactRecord {
+  if (target.projectRoot != null) {
+    ensureTermshotDir(target.projectRoot);
+  }
+  return target.exclusive ? writeNewArtifact(path, data) : writeArtifact(path, data);
+}
+
+function livePorts(shell: ShellId, publisher: Publisher, target: CaptureTarget): RunPorts {
   return {
     shell: { argv: (command) => resolveShellArgv(shell, command, Bun.which) },
     runner: defaultCommandRunner(),
@@ -54,14 +69,7 @@ function livePorts(shell: ShellId, publisher: Publisher, projectRoot: string | n
     prompt: defaultPrompt(),
     highlighter: defaultHighlighter(),
     renderer: defaultRenderer(),
-    artifacts: {
-      write: (path, data) => {
-        if (projectRoot != null) {
-          ensureTermshotDir(projectRoot);
-        }
-        return writeArtifact(path, data);
-      },
-    },
+    artifacts: { write: (path, data) => writeCapture(path, data, target) },
     publisher: { publish: (request) => publisher.publish(request) },
   };
 }
@@ -168,8 +176,8 @@ async function runCapture(argv: string[]): Promise<void> {
     }
     // -o wins. Otherwise captures go in the project's .termshot/captures/, or
     // in ~/termshot/ outside any project, where nothing is created in cwd.
-    const defaultFolderRoot = invocation.output == null ? root : null;
-    const outputPath = invocation.output ?? defaultCapturePath(root, homedir(), timestamp());
+    const byDefault = invocation.output == null;
+    const outputPath = invocation.output ?? defaultCapturePath(root, homedir(), captureStamp(new Date()));
     const result = await runTermshot(
       {
         version: VERSION,
@@ -180,7 +188,7 @@ async function runCapture(argv: string[]): Promise<void> {
         cwd,
         outputPath,
       },
-      livePorts(settings.shell, publisher, defaultFolderRoot),
+      livePorts(settings.shell, publisher, { exclusive: byDefault, projectRoot: byDefault ? root : null }),
     );
     emit(result);
     process.exit(exitCodeFor(result));

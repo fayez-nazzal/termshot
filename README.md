@@ -113,7 +113,7 @@ termshot --run "ls" --publish 42               # post the capture to PR 42 (publ
 
 `--run` is required. Without it the run ends with a usage error and exit code 2.
 
-The default output path is `.termshot/captures/<timestamp>.png` inside a project, and `~/termshot/<timestamp>.png` outside one.
+The default output path is `.termshot/captures/<timestamp>.png` inside a project, and `~/termshot/<timestamp>.png` outside one. `<timestamp>` is local time as `YYYYMMDD-HHMMSS-mmm`, for example `20261116-090507-042.png`. A default path never replaces a file: if the name is taken, termshot writes `<timestamp>-1.png`, then `-2`, and so on, and `capture.path` names the file it wrote. A path given with `-o` is replaced if it exists.
 
 ## Project config
 

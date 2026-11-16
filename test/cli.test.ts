@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { VERSION, captureSettings, promptContext } from "../src/cli.ts";
+import { VERSION, captureSettings, captureStamp, promptContext, writeCapture } from "../src/cli.ts";
 import { CONFIG_KEY_NAMES, effectiveConfig } from "../src/configuration/config.ts";
 import { parseFlags } from "../src/invocation/flags.ts";
 import { helpText } from "../src/invocation/help.ts";
@@ -62,6 +62,27 @@ test("help describes the headless model and names the config file and every key"
 
 test("an empty record has a null shell", () => {
   expect(buildResult({ tool: "termshot", version: "0", status: "usage-error" }).terminal).toEqual({ shell: null, cols: null, rows: null });
+});
+
+test("the default capture name is local time down to the millisecond", () => {
+  expect(captureStamp(new Date(2026, 10, 16, 9, 5, 7, 42))).toBe("20261116-090507-042");
+});
+
+test("a default-path capture never overwrites, an explicit -o path does", () => {
+  const dir = mkdtempSync(join(tmpdir(), "termshot-write-"));
+  const path = join(dir, "shot.png");
+  const byDefault = { exclusive: true, projectRoot: null };
+  expect(writeCapture(path, new Uint8Array([1]), byDefault).path).toBe(path);
+  expect(writeCapture(path, new Uint8Array([2]), byDefault).path).toBe(join(dir, "shot-1.png"));
+  expect(writeCapture(path, new Uint8Array([3]), { exclusive: false, projectRoot: null }).path).toBe(path);
+  expect([...readFileSync(path)]).toEqual([3]);
+  expect([...readFileSync(join(dir, "shot-1.png"))]).toEqual([2]);
+});
+
+test("a default-path capture in a project makes .termshot/ with its .gitignore", () => {
+  const root = mkdtempSync(join(tmpdir(), "termshot-write-root-"));
+  writeCapture(join(root, ".termshot", "captures", "a.png"), new Uint8Array([1]), { exclusive: true, projectRoot: root });
+  expect(readFileSync(join(root, ".termshot", ".gitignore"), "utf8")).toBe("captures/\n");
 });
 
 test("VERSION comes from package.json", () => {
