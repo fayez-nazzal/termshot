@@ -39,7 +39,7 @@ Only when the user asks to upload or post the screenshot, add `--publish <dest>`
 
 - `environment-error`, step `shell`, "was not found on PATH": the configured shell is missing. Tell the user. They can install it or run `termshot config set shell <name>`. Leave their config as is.
 - `environment-error`, step `command-run` or `artifact`, any other message: the terminal could not start, or the output path could not be written. Check the `-o` folder and show the user the message.
-- `internal-error`, step `rendering`: no PNG was written. Re-run once, then show the user the message.
+- `internal-error`, step `rendering`: no PNG was written. If the message says "image too large", re-run with a smaller `--rows`. Otherwise re-run once, then show the user the message.
 - `usage-error`, step `config`: their `.termshot/config.json` is invalid. Show them the message.
 - `timeout`: the command ran past 60 seconds or waited for input. No PNG was written.
 - `environment-error`, step `command-run`, "interrupted by SIGINT" (or `SIGTERM`): termshot was stopped and killed the command. No PNG was written. Re-run it without interrupting.

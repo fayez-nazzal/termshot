@@ -249,6 +249,7 @@ A bad `<dest>` for the chosen publisher fails with `usage-error` before the comm
 - Characters missing from the bundled font, such as emoji and CJK, draw as blank space.
 - A full-screen program still on its alternate screen when it exits shows only its last screen. A screen clear shows only what came after it.
 - Output over 10000 lines keeps only the last 10000.
+- An image over 2^28 pixels (about 268 million) is not drawn. The run fails with `internal-error` at step `rendering` and the message `image too large: <w>x<h> px; lower rows or font.size`. At the default `font.size` this takes both a large `cols` and a large `rows`.
 - `--version` prints the `version` field from `package.json`.
 
 ## Development

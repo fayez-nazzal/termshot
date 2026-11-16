@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { FONT_FAMILY } from "../src/rendering/fonts.ts";
 import { defaultRenderer } from "../src/rendering/registry.ts";
-import { rasterize } from "../src/rendering/resvg.ts";
+import { freeQuietly, rasterize } from "../src/rendering/resvg.ts";
 import { RENDERING_SETTINGS } from "../src/rendering/settings.ts";
 import { frameToSvg } from "../src/rendering/svg-frame.ts";
 import type { Frame, FrameCell } from "../src/frame/frame.ts";
@@ -19,6 +19,31 @@ test("rasterized text actually draws", async () => {
   const withText = `${bare}<text x="4" y="24" font-family="${FONT_FAMILY}" font-size="18">hi</text></svg>`;
   const [blank, drawn] = await Promise.all([rasterize(`${bare}</svg>`, 2), rasterize(withText, 2)]);
   expect(Buffer.from(drawn).equals(Buffer.from(blank))).toBe(false);
+});
+
+const plainSvg = (width: number, height: number) => `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="#123"/></svg>`;
+
+test("an image over 2^28 pixels fails with a clear message before rasterizing", async () => {
+  await expect(rasterize(plainSvg(16384, 16385), 1)).rejects.toThrow("image too large: 16384x16385 px; lower rows or font.size");
+  await expect(rasterize(plainSvg(20000, 20000), 2)).rejects.toThrow("image too large: 40000x40000 px; lower rows or font.size");
+  expect(pngHeader(await rasterize(plainSvg(100, 40), 2))).toEqual({ width: 200, height: 80 });
+});
+
+test("a too-large frame fails in the renderer, so the run reports it at step rendering", async () => {
+  await expect(defaultRenderer().render(frameOf(["x"], 1000), themeFor("dark"), 48)).resolves.toBeInstanceOf(Uint8Array);
+  const tall = frameOf(Array.from({ length: 100 }, () => "x"), 1000);
+  await expect(defaultRenderer().render(tall, themeFor("dark"), 48)).rejects.toThrow("image too large: 57728x14528 px");
+});
+
+test("freeQuietly calls free and swallows what it throws", () => {
+  let calls = 0;
+  freeQuietly({
+    free: () => {
+      calls = calls + 1;
+      throw new Error("recursive use of an object detected which would lead to unsafe aliasing in rust");
+    },
+  });
+  expect(calls).toBe(1);
 });
 
 function frameOf(lines: string[], cols: number): Frame {
