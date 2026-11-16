@@ -37,15 +37,24 @@ export const xtermEmulator: TerminalEmulator = {
     const lines: Row[] = [];
     try {
       // Lines above the last full-screen clear are not part of the final state.
+      // Only the main screen has scrollback, so only its clears count, and a
+      // full reset (RIS) wipes it, forgetting any earlier clear.
       let firstLine = 0;
       term.parser.registerCsiHandler({ final: "J" }, (params) => {
-        if (params[0] === 2) firstLine = term.buffer.active.baseY;
-        else if (params[0] === 3) firstLine = 0;
+        if (term.buffer.active.type === "normal") {
+          if (params[0] === 2) firstLine = term.buffer.active.baseY;
+          else if (params[0] === 3) firstLine = 0;
+        }
+        return false;
+      });
+      term.parser.registerEscHandler({ final: "c" }, () => {
+        firstLine = 0;
         return false;
       });
       await new Promise<void>((resolve) => term.write(bytes, resolve));
       const buffer = term.buffer.active;
-      for (let y = firstLine; y < buffer.length; y++) {
+      // A program still on the alternate screen shows that whole screen.
+      for (let y = buffer.type === "normal" ? firstLine : 0; y < buffer.length; y++) {
         const line = buffer.getLine(y);
         const row: Row = [];
         for (let x = 0; x < cols; x++) {

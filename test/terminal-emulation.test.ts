@@ -41,3 +41,13 @@ test("2J followed by 3J still shows what comes after", async () => {
   const out = Array.from({ length: 12 }, (_, i) => `l${i}`).join("\r\n");
   expect((await render(`${out}\x1b[2J\x1b[3J\x1b[Hnew`, 20, 5)).map(lineText)).toEqual(["new"]);
 });
+const twelve = Array.from({ length: 12 }, (_, i) => `l${i}`).join("\r\n");
+test("a clear on the alternate screen does not undo an earlier clear on the main screen", async () => {
+  expect((await render(`${twelve}\x1b[2J\x1b[Hnew\x1b[?1049h\x1b[2J\x1b[3Jalt\x1b[?1049l`, 20, 5)).map(lineText)).toEqual(["new"]);
+});
+test("a full reset forgets an earlier clear", async () => {
+  expect((await render(`${twelve}\x1b[2J\x1bcnew`, 20, 5)).map(lineText)).toEqual(["new"]);
+});
+test("a program still on the alternate screen after a main-screen clear shows its last screen", async () => {
+  expect((await render(`${twelve}\x1b[2J\x1b[Hold\x1b[?1049h\x1b[Halt`, 20, 5)).map(lineText)).toEqual(["alt"]);
+});
