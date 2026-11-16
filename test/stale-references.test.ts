@@ -12,12 +12,13 @@ const WINDOW = /\b(terminal|new|fresh|the|a) window\b|\bwindow (manager|title|id
 
 function trackedFiles(): string[] {
   const listed = Bun.spawnSync(["git", "ls-files"], { cwd: ROOT, stdout: "pipe" });
-  return listed.stdout
+  expect(listed.exitCode).toBe(0);
+  const files = listed.stdout
     .toString()
     .split("\n")
-    .filter((path) => path !== "")
-    .filter((path) => path !== SELF)
-    .filter((path) => !SKIPPED_FOLDERS.some((folder) => path.startsWith(folder)));
+    .filter((path) => path !== "");
+  expect(files.length).toBeGreaterThan(0);
+  return files.filter((path) => path !== SELF).filter((path) => !SKIPPED_FOLDERS.some((folder) => path.startsWith(folder)));
 }
 
 function isBinary(bytes: Buffer): boolean {

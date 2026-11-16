@@ -139,8 +139,8 @@ Each project keeps its own look in `.termshot/config.json`. Commit that file, so
 | `shell` | `zsh`, `bash`, `sh` | `zsh` |
 | `theme` | `dark`, `light` | `dark` |
 | `font.size` | Whole number from 10 to 48 | `18` |
-| `cols` | Positive whole number | `120` |
-| `rows` | Positive whole number. The most rows shown; the image is cut to the rows actually used | `30` |
+| `cols` | Whole number from 1 to 1000 | `120` |
+| `rows` | Whole number from 1 to 1000. The most rows shown; the image is cut to the rows actually used | `30` |
 | `prompt.show` | `true`, `false` | `true` |
 | `prompt.directory` | `full`, `short` (last folder only), `none` | `full` |
 | `prompt.git` | `true`, `false` | `true` |
@@ -207,7 +207,7 @@ Notes on that record:
 | 0 | `ok` | The PNG was written and the command succeeded |
 | 1 | `command-failed` | The PNG was written and the command exited non zero |
 | 2 | `usage-error` | Bad or missing flags, or a bad config file. Nothing ran |
-| 3 | `environment-error` | The shell is missing, the terminal could not start, or the output folder could not be written |
+| 3 | `environment-error` | The shell is missing, the terminal could not start, or the output folder could not be written. Also when `termshot config set` cannot write the config file |
 | 4 | `timeout` | The command did not finish in 60 seconds |
 | 5 | `truncated` | Reserved. No run produces this code |
 | 6 | `publish-failed` | The PNG was written but the upload failed |
@@ -246,7 +246,7 @@ A bad `<dest>` for the chosen publisher fails with `usage-error` before the comm
 
 - The command must finish by itself within 60 seconds. The limit is not configurable.
 - The command must not be interactive. A command that reads stdin twice, like `cat; cat`, waits until the timeout, because termshot sends only one end-of-file.
-- Characters missing from the bundled font, such as emoji and CJK, draw as blank boxes.
+- Characters missing from the bundled font, such as emoji and CJK, draw as blank space.
 - A full-screen program still on its alternate screen when it exits shows only its last screen. A screen clear shows only what came after it.
 - Output over 10000 lines keeps only the last 10000.
 - `--version` prints the `version` field from `package.json`.
