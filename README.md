@@ -240,7 +240,7 @@ A bad `<dest>` for the chosen publisher fails with `usage-error` before the comm
 - The output goes through a terminal emulator in memory. The image shows the prompt line and the highlighted command at the top, then the output exactly as the terminal drew it. termshot never rewrites or recolors the output.
 - When the output is taller than `rows`, the prompt line stays at the top and the last lines of output show below it, as a terminal would after scrolling.
 - The image is rendered at 2x with the bundled JetBrains Mono font. The cursor is never drawn.
-- If you interrupt termshot with Ctrl-C or `SIGTERM`, it kills the command and stops. It renders, writes and publishes nothing. The record shows `environment-error` at step `command-run` with the message `interrupted by SIGINT` (or `SIGTERM`), and `command.exitStatus` is `null`. termshot exits `3`.
+- If you interrupt termshot with Ctrl-C or `SIGTERM` while the command is running, it kills the command and stops. It renders, writes and publishes nothing. The record shows `environment-error` at step `command-run` with the message `interrupted by SIGINT` (or `SIGTERM`), and `command.exitStatus` is `null`. termshot exits `3`.
 
 ## Limits
 
