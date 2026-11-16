@@ -5,17 +5,19 @@ import { join } from "node:path";
 import { pngHeader } from "../src/artifact/png-header.ts";
 
 const ROOT = join(import.meta.dir, "..");
-const BIN = join(ROOT, "dist", "termshot");
 
 let buildDir = "";
+let bin = "";
 let tmp = "";
 let home = "";
 
-// The compile runs from its own temp folder, because it leaves a large
-// .bun-build file in its working folder.
+// The compile runs in its own temp folder and writes the binary there,
+// because it leaves a large .bun-build file in its working folder, and the
+// repo's dist/termshot may be the one on the user's PATH.
 beforeAll(() => {
   buildDir = mkdtempSync(join(tmpdir(), "termshot-e2e-build-"));
-  const build = Bun.spawnSync(["bun", "build", "--compile", join(ROOT, "src", "cli.ts"), "--outfile", BIN], { cwd: buildDir, stdout: "pipe", stderr: "pipe" });
+  bin = join(buildDir, "termshot");
+  const build = Bun.spawnSync(["bun", "build", "--compile", join(ROOT, "src", "cli.ts"), "--outfile", bin], { cwd: buildDir, stdout: "pipe", stderr: "pipe" });
   expect(build.exitCode).toBe(0);
   tmp = mkdtempSync(join(tmpdir(), "termshot-e2e-"));
   home = mkdtempSync(join(tmpdir(), "termshot-e2e-home-"));
@@ -30,7 +32,7 @@ afterAll(() => {
 });
 
 function termshot(args: string[]) {
-  const proc = Bun.spawnSync([BIN, ...args], { cwd: tmp, env: { ...process.env, HOME: home }, stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawnSync([bin, ...args], { cwd: tmp, env: { ...process.env, HOME: home }, stdout: "pipe", stderr: "pipe" });
   return { exitCode: proc.exitCode, record: JSON.parse(proc.stdout.toString()) };
 }
 
