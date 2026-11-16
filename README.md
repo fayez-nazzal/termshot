@@ -207,7 +207,7 @@ Notes on that record:
 | 0 | `ok` | The PNG was written and the command succeeded |
 | 1 | `command-failed` | The PNG was written and the command exited non zero |
 | 2 | `usage-error` | Bad or missing flags, or a bad config file. Nothing ran |
-| 3 | `environment-error` | The shell is missing, the terminal could not start, or the output folder could not be written. Also when `termshot config set` cannot write the config file |
+| 3 | `environment-error` | The shell is missing, the terminal could not start, termshot was interrupted, or the output folder could not be written. Also when `termshot config set` cannot write the config file |
 | 4 | `timeout` | The command did not finish in 60 seconds |
 | 5 | `truncated` | Reserved. No run produces this code |
 | 6 | `publish-failed` | The PNG was written but the upload failed |
@@ -240,7 +240,7 @@ A bad `<dest>` for the chosen publisher fails with `usage-error` before the comm
 - The output goes through a terminal emulator in memory. The image shows the prompt line and the highlighted command at the top, then the output exactly as the terminal drew it. termshot never rewrites or recolors the output.
 - When the output is taller than `rows`, the prompt line stays at the top and the last lines of output show below it, as a terminal would after scrolling.
 - The image is rendered at 2x with the bundled JetBrains Mono font. The cursor is never drawn.
-- If you interrupt termshot with Ctrl-C or `SIGTERM`, it kills the command and still renders what it printed. The record shows `command-failed` with `command.exitStatus` `137`.
+- If you interrupt termshot with Ctrl-C or `SIGTERM`, it kills the command and stops. It renders, writes and publishes nothing. The record shows `environment-error` at step `command-run` with the message `interrupted by SIGINT` (or `SIGTERM`), and `command.exitStatus` is `null`. termshot exits `3`.
 
 ## Limits
 

@@ -74,3 +74,13 @@ test("processSignalPort removes the process listener it added", () => {
   remove();
   expect(process.listenerCount("SIGTERM")).toBe(before);
 });
+
+test("onInterrupt hears which signal fired before dispose runs, and exit is not an interrupt", () => {
+  const events: string[] = [];
+  const { port, handlers } = fakeSignalPort();
+  registerSignalSafeDisposal(() => events.push("dispose"), port, (signal) => events.push(signal));
+  handlers.SIGTERM[0]!();
+  handlers.SIGINT[0]!();
+  handlers.exit[0]!();
+  expect(events).toEqual(["SIGTERM", "dispose", "SIGINT", "dispose", "dispose"]);
+});

@@ -98,7 +98,7 @@ Exit codes, from `src/run-result/exit-codes.ts`.
 | 0 | `ok` | The PNG was written and the command succeeded |
 | 1 | `command-failed` | The PNG was written and the command exited non zero |
 | 2 | `usage-error` | Bad or missing flags, or a bad config file. Nothing ran |
-| 3 | `environment-error` | The shell is missing (step `shell`), the terminal could not start (step `command-run`), or the output folder or file could not be written (step `artifact`). Also when `termshot config set` cannot write the config file (step `config`) |
+| 3 | `environment-error` | The shell is missing (step `shell`), the terminal could not start or termshot was interrupted (step `command-run`), or the output folder or file could not be written (step `artifact`). Also when `termshot config set` cannot write the config file (step `config`) |
 | 4 | `timeout` | The command did not finish in 60 seconds. No PNG was written |
 | 5 | `truncated` | Reserved. No run produces this code |
 | 6 | `publish-failed` | The PNG was written but the upload failed |
@@ -115,7 +115,7 @@ Exit code `1` still means you have a good PNG. Treat it as success for evidence,
 | `status` is `environment-error` at step `shell` saying the shell `was not found on PATH` | The configured shell is not installed or not on `PATH` | Tell the user. They can install it or pick another with `termshot config set shell <name>` |
 | `status` is `internal-error` at step `rendering` | The frame could not be drawn, so no PNG was written | Re-run once. If it fails again, report the message to the user |
 | `status` is `timeout` on a command that reads stdin | termshot sends one end-of-file, and the command waits for more input, as `cat; cat` does | Feed the input from a file or a pipe inside `--run`, for example `--run "sort < /tmp/input.txt"` |
-| `status` is `command-failed` with `command.exitStatus` `137` | termshot got `SIGINT` or `SIGTERM` and killed the command. The PNG shows what it printed so far | Re-run without interrupting it |
+| `status` is `environment-error` at step `command-run` saying `interrupted by SIGINT` or `interrupted by SIGTERM` | termshot got that signal and killed the command. No PNG was written and nothing was published | Re-run without interrupting it |
 | The PNG shows only part of the output | Output over 10000 lines keeps only the last 10000. A screen clear keeps only what came after it. A full-screen program still on its alternate screen at exit shows only its last screen | Capture a shorter command, or one that does not clear the screen |
 | Emoji or CJK text draws as blank space in the PNG | The bundled font has no glyph for those characters | Expected. Nothing to fix |
 | `status` is `usage-error` at step `flags` saying `--publish dest for <publisher> must look like` | The destination does not fit the configured publisher | Use the format in the message: `remote:path` for `rclone`, a PR number, URL or branch for `gh` |

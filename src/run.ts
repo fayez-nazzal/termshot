@@ -203,6 +203,13 @@ export async function runTermshot(setup: RunSetup, ports: RunPorts): Promise<Run
   let result: RunResult;
   if (!run.ok) {
     result = record(setup, { status: run.status, errors: [run.error] });
+  } else if (run.value.interrupted != null) {
+    // termshot itself was stopped, so it leaves nothing behind: no image, no upload.
+    result = record(setup, {
+      status: "environment-error",
+      command: commandFacts(invocation, run.value),
+      errors: [{ step: "command-run", message: `interrupted by ${run.value.interrupted}` }],
+    });
   } else if (run.value.timedOut) {
     result = record(setup, {
       status: "timeout",

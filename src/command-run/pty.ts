@@ -85,12 +85,15 @@ async function runInPty(request: RunRequest, signals: SignalPort): Promise<Comma
   // Once the command is reaped its pid can be reused, so a late signal to
   // termshot must not kill anything; the listeners are removed then too.
   let reaped = false;
+  let interrupted: NodeJS.Signals | null = null;
   const dispose = idempotentDisposer(() => {
     if (!reaped) {
       signalCommand(proc, "SIGKILL");
     }
   });
-  const unregister = registerSignalSafeDisposal(dispose, signals);
+  const unregister = registerSignalSafeDisposal(dispose, signals, (signal) => {
+    interrupted ??= signal;
+  });
 
   // Echo off before sending end of input, so "^D" never reaches the output.
   // The command still sees a terminal on stdin, and anything reading it
@@ -112,11 +115,14 @@ async function runInPty(request: RunRequest, signals: SignalPort): Promise<Comma
   await settlesWithin(ended, OUTPUT_DRAIN_MS);
   terminal.close();
 
+  // A command killed because termshot was interrupted did not finish on its
+  // own, so like a timed-out one it has no exit status.
   return {
     output: concat(chunks),
-    exitStatus: finished ? exitStatusOf(proc) : null,
+    exitStatus: finished && interrupted == null ? exitStatusOf(proc) : null,
     timedOut: !finished,
     durationMs: Math.round(performance.now() - startedAt),
+    interrupted,
   };
 }
 

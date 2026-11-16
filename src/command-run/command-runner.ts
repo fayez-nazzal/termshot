@@ -12,6 +12,8 @@ export interface CommandRunResult {
   exitStatus: number | null;
   timedOut: boolean;
   durationMs: number;
+  // The signal that interrupted termshot and so killed the command, else null.
+  interrupted: NodeJS.Signals | null;
 }
 
 // Runs argv in a pseudo-terminal of cols x rows and returns everything it

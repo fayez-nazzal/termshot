@@ -35,9 +35,14 @@ export function idempotentDisposer(kill: () => void): () => void {
 }
 
 // Returns a function that removes the listeners. Call it once the command is
-// reaped, so later signals get their default behavior back.
-export function registerSignalSafeDisposal(dispose: () => void, signals: SignalPort): () => void {
-  const removers = [signals.onExit(dispose), signals.onSignal("SIGINT", dispose), signals.onSignal("SIGTERM", dispose)];
+// reaped, so later signals get their default behavior back. onInterrupt hears
+// which signal fired, before dispose runs.
+export function registerSignalSafeDisposal(dispose: () => void, signals: SignalPort, onInterrupt: (signal: NodeJS.Signals) => void = () => {}): () => void {
+  const interrupt = (signal: NodeJS.Signals) => () => {
+    onInterrupt(signal);
+    dispose();
+  };
+  const removers = [signals.onExit(dispose), signals.onSignal("SIGINT", interrupt("SIGINT")), signals.onSignal("SIGTERM", interrupt("SIGTERM"))];
   return () => {
     for (const remove of removers) {
       remove();

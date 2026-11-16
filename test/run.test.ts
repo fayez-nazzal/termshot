@@ -56,7 +56,7 @@ function outputRow(text: string): Row {
 }
 
 function ran(overrides: Partial<CommandRunResult> = {}): CommandRunResult {
-  return { output: new TextEncoder().encode("hi\r\n"), exitStatus: 0, timedOut: false, durationMs: 12, ...overrides };
+  return { output: new TextEncoder().encode("hi\r\n"), exitStatus: 0, timedOut: false, durationMs: 12, interrupted: null, ...overrides };
 }
 
 interface Spies {
@@ -186,6 +186,39 @@ test("timeout writes nothing and reports null grid", async () => {
   expect(result.capture.path).toBeNull();
   expect(spies.artifacts.size).toBe(0);
   expect(spies.frames).toEqual([]);
+});
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  test(`an interrupt by ${signal} renders, writes and publishes nothing, and is an environment error`, async () => {
+    const spies: Spies = { artifacts: new Map(), requests: [], frames: [] };
+    const ports = fakePorts(spies);
+    let publishes = 0;
+    ports.publisher.publish = (request) => {
+      publishes = publishes + 1;
+      return published().publish(request);
+    };
+    ports.runner.run = async () => ran({ exitStatus: null, durationMs: 840, interrupted: signal });
+    const result = await runTermshot(setup(), ports);
+
+    expect(result.status).toBe("environment-error");
+    expect(exitCodeFor(result)).toBe(3);
+    expect(result.errors).toEqual([{ step: "command-run", message: `interrupted by ${signal}` }]);
+    expect(result.command).toEqual({ argv: ["echo hi"], exitStatus: null, durationMs: 840, timedOut: false });
+    expect(result.terminal).toEqual({ shell: "zsh", cols: null, rows: null });
+    expect(result.capture.path).toBeNull();
+    expect(result.publish).toEqual({ requested: true, publisher: "gh", url: null, markdown: null, verified: false });
+    expect(spies.frames).toEqual([]);
+    expect(spies.artifacts.size).toBe(0);
+    expect(publishes).toBe(0);
+  });
+}
+
+test("an interrupt that lands after the timeout still reports the interrupt", async () => {
+  const ports = fakePorts();
+  ports.runner.run = async () => ran({ exitStatus: null, timedOut: true, durationMs: 60100, interrupted: "SIGINT" });
+  const result = await runTermshot(setup(), ports);
+  expect(result.status).toBe("environment-error");
+  expect(result.errors).toEqual([{ step: "command-run", message: "interrupted by SIGINT" }]);
 });
 
 test("an emulator failure is internal-error at step terminal-emulation, command status kept", async () => {

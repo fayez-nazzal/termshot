@@ -69,3 +69,35 @@ test("the runner stops listening for signals once the command is reaped", async 
   expect(r.exitStatus).toBe(0);
   expect(listening).toBe(0);
 });
+
+function capturingSignalPort() {
+  const handlers = new Map<string, () => void>();
+  const signals: SignalPort = {
+    onExit: (handler) => {
+      handlers.set("exit", handler);
+      return () => handlers.delete("exit");
+    },
+    onSignal: (signal, handler) => {
+      handlers.set(signal, handler);
+      return () => handlers.delete(signal);
+    },
+  };
+  return { signals, handlers };
+}
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  test(`${signal} to termshot kills the command and reports the interrupt, not an exit status`, async () => {
+    const { signals, handlers } = capturingSignalPort();
+    const running = ptyCommandRunner(signals).run({ argv: ["/bin/sh", "-c", "sleep 10"], cols: 80, rows: 24, env: commandEnv(process.env, "xterm-256color", 80, 24), cwd: process.cwd(), timeoutMs: 60000 });
+    await Bun.sleep(100);
+    handlers.get(signal)!();
+    const r = await running;
+    expect(r).toMatchObject({ interrupted: signal, exitStatus: null, timedOut: false });
+    expect(r.durationMs).toBeLessThan(3000);
+    expect(handlers.size).toBe(0);
+  });
+}
+
+test("a command that finishes on its own is not interrupted", async () => {
+  expect((await run("echo hi")).interrupted).toBeNull();
+});
