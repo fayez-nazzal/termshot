@@ -56,7 +56,7 @@ termshot --run "seq 1 40" --cols 60 --rows 12 -o /tmp/small.png > /tmp/small.jso
 jq -c .terminal /tmp/small.json
 ```
 
-Proves the `terminal` block reports the shell used and the grid actually rendered. Ran it, and `jq` printed `{"shell":"zsh","cols":60,"rows":12}`. `rows` is the visible height rendered, capped at `--rows`. The same run with `echo hi` reports `rows` of `2`: the prompt line and one line of output.
+Proves the `terminal` block reports the shell used and the grid actually rendered. Ran it, and `jq` printed `{"shell":"zsh","cols":60,"rows":12}`. `rows` is the number of rows rendered: the prompt and command lines, then as many output lines as fit under `--rows`. The prompt and command lines are always kept, so a command that wraps onto more lines than `--rows` makes `rows` larger than `--rows`. The same run with `echo hi` reports `rows` of `2`: the prompt line and one line of output.
 
 ## Reading the output
 
@@ -86,7 +86,7 @@ Fields worth asserting on.
 | `capture.sha256` | Hash of the written PNG bytes |
 | `capture.bytes` | Size of the written PNG |
 | `terminal.shell` | Which shell ran the command, `zsh`, `bash` or `sh`. Set even on failure |
-| `terminal.cols` and `terminal.rows` | The width used and the visible height actually rendered, or `null` when nothing was rendered |
+| `terminal.cols` and `terminal.rows` | The width used and the number of rows actually rendered, or `null` when nothing was rendered. `rows` is usually at most `--rows`, but a command that wraps onto more lines than that keeps them all |
 | `publish.publisher` | `rclone` or `gh` when `--publish` was passed, else `null` |
 | `publish.url`, `publish.markdown` and `publish.verified` | The uploaded image URL, its Markdown embed, and whether the upload was confirmed. Only meaningful when `--publish` was passed |
 | `errors[]` | Objects with a `step` and a `message` |
@@ -118,7 +118,7 @@ Exit code `1` still means you have a good PNG. Treat it as success for evidence,
 | `status` is `timeout` on a command that reads stdin | termshot sends one end-of-file, and the command waits for more input, as `cat; cat` does | Feed the input from a file or a pipe inside `--run`, for example `--run "sort < /tmp/input.txt"` |
 | `status` is `environment-error` at step `command-run` saying `interrupted by SIGINT` or `interrupted by SIGTERM` | termshot got that signal and killed the command. No PNG was written and nothing was published | Re-run without interrupting it |
 | The PNG shows only part of the output | Output over 10000 lines keeps only the last 10000. A screen clear keeps only what came after it. A full-screen program still on its alternate screen at exit shows only its last screen | Capture a shorter command, or one that does not clear the screen |
-| Emoji or CJK text draws as blank space in the PNG | The bundled font has no glyph for those characters | Expected. Nothing to fix |
+| Emoji or CJK text draws as an empty box in the PNG | The bundled font has no glyph for those characters | Expected. Nothing to fix |
 | `status` is `usage-error` at step `flags` saying `--publish dest for <publisher> must look like` | The destination does not fit the configured publisher | Use the format in the message: `remote:path` for `rclone`, a PR number, URL or branch for `gh` |
 | `status` is `usage-error` at step `config` naming `config.json` | The project config file has an unknown key or value | Ask the user to fix it with `termshot config set` or `termshot config unset` |
 | `status` is `usage-error` saying a flag `was removed` | One of `--annotate`, `--copy`, `--window-pick`, `--box`, `--marker`, `--list`, `--window`, `--stdout`, `--terminal` or `--settle` was passed, all removed | Drop the flag. Check the flag table in `README.md` |

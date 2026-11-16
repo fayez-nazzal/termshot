@@ -28,7 +28,7 @@ jq -r '.status, .command.exitStatus, .capture.path' /tmp/evidence.json
 - `status` is the run verdict. `ok` and `command-failed` both mean the PNG was written.
 - `command.exitStatus` is the captured command's exit status. `exitCode` is termshot's own exit code. Judge the command by `command.exitStatus`.
 - `capture.path`, `capture.sha256` describe the PNG.
-- `terminal.shell` is the shell used. `terminal.rows` is the height actually rendered.
+- `terminal.shell` is the shell used. `terminal.rows` is the number of rows actually rendered; a very long command that wraps can make it larger than `--rows`.
 - On failure, `errors[]` holds `{step, message}`.
 
 ## Publish

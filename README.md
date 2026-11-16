@@ -138,7 +138,7 @@ Each project keeps its own look in `.termshot/config.json`. Commit that file, so
 |-----|--------|---------|
 | `shell` | `zsh`, `bash`, `sh` | `zsh` |
 | `theme` | `dark`, `light` | `dark` |
-| `font.size` | Whole number from 10 to 48 | `18` |
+| `font.size` | Whole number from 10 to 48, in pixels before the 2x render scale | `18` |
 | `cols` | Whole number from 1 to 1000 | `120` |
 | `rows` | Whole number from 1 to 1000. The most rows shown; the image is cut to the rows actually used | `30` |
 | `prompt.show` | `true`, `false` | `true` |
@@ -197,7 +197,7 @@ Real record from `termshot --run "echo hi" -o /tmp/ts-demo.png` on this machine:
 Notes on that record:
 
 - `capture.path` is the `-o` path as given, and `sha256` is the hash of the written PNG. `width` and `height` are the real pixel size.
-- The `terminal` block names the `shell` the command ran in, set even when the run fails. `cols` is the width used. `rows` is the visible height actually rendered, which can be less than the `rows` asked for. Both are `null` when nothing was rendered.
+- The `terminal` block names the `shell` the command ran in, set even when the run fails. `cols` is the width used. `rows` is the number of rows actually rendered. It is often less than the `rows` asked for. It can be more when the command itself wraps onto more lines than that, because the prompt and command lines are always kept. Both are `null` when nothing was rendered.
 - stderr carries the human lines: one per entry in `errors`, then `termshot: wrote <path> (<n> bytes)` when a file was written.
 
 ## Exit codes
@@ -246,7 +246,7 @@ A bad `<dest>` for the chosen publisher fails with `usage-error` before the comm
 
 - The command must finish by itself within 60 seconds. The limit is not configurable.
 - The command must not be interactive. A command that reads stdin twice, like `cat; cat`, waits until the timeout, because termshot sends only one end-of-file.
-- Characters missing from the bundled font, such as emoji and CJK, draw as blank space.
+- Characters missing from the bundled font, such as emoji and CJK, draw as an empty box.
 - A full-screen program still on its alternate screen when it exits shows only its last screen. A screen clear shows only what came after it.
 - Output over 10000 lines keeps only the last 10000.
 - An image over 2^28 pixels (about 268 million) is not drawn. The run fails with `internal-error` at step `rendering` and the message `image too large: <w>x<h> px; lower rows or font.size`. At the default `font.size` this takes both a large `cols` and a large `rows`.

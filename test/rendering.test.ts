@@ -84,6 +84,7 @@ test("font size setting is 10 to 48, default 18", () => {
   expect([setting.default, setting.parse("10"), setting.parse(48)]).toEqual([18, 10, 48]);
   expect(() => setting.parse(9)).toThrow();
   expect(() => setting.parse(49)).toThrow();
+  expect(setting.description).toBe("Font size in pixels, before the 2x render scale, 10 to 48");
 });
 
 function styled(patch: Partial<FrameCell>, char = "x"): Frame {
