@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`termshot` is built to be called by an AI coding agent. It runs one command in a built-in headless terminal, renders it to a PNG, and prints one JSON line describing the run. Nothing shows on screen and no permission is needed. The reason to call it instead of piping output into a log is that JSON line. It carries `capture.path`, `capture.bytes` and `capture.sha256`, so you can prove a terminal artifact exists and is the exact one you just made, without ever loading the image into your context. `README.md` documents what every flag and config key does. This file documents the order to do things in.
+`termshot` is built to be called by an AI coding agent. It runs one command in a built-in headless terminal, renders it to a PNG, and prints one JSON line describing the run. Nothing shows on screen and no permission is needed. The reason to call it instead of piping output into a log is that JSON line. It carries `capture.path`, `capture.bytes` and `capture.sha256`, so you can prove a terminal artifact exists and is the exact one you just made, without ever loading the image into your context. [The command reference](docs/reference.md) documents what every flag and config key does. This file documents the order to do things in.
 
 ## Golden rules
 
@@ -121,7 +121,7 @@ Exit code `1` still means you have a good PNG. Treat it as success for evidence,
 | Emoji or CJK text draws as an empty box in the PNG | The bundled font has no glyph for those characters | Expected. Nothing to fix |
 | `status` is `usage-error` at step `flags` saying `--publish dest for <publisher> must look like` | The destination does not fit the configured publisher | Use the format in the message: `remote:path` for `rclone`, a PR number, URL or branch for `gh` |
 | `status` is `usage-error` at step `config` naming `config.json` | The project config file has an unknown key or value | Ask the user to fix it with `termshot config set` or `termshot config unset` |
-| `status` is `usage-error` saying a flag `was removed` | One of `--annotate`, `--copy`, `--window-pick`, `--box`, `--marker`, `--list`, `--window`, `--stdout`, `--terminal` or `--settle` was passed, all removed | Drop the flag. Check the flag table in `README.md` |
+| `status` is `usage-error` saying a flag `was removed` | One of `--annotate`, `--copy`, `--window-pick`, `--box`, `--marker`, `--list`, `--window`, `--stdout`, `--terminal` or `--settle` was passed, all removed | Drop the flag. Check the flag table in [the command reference](docs/reference.md) |
 | `termshot: command not found` right after cloning | `bin` points at `dist/termshot`, which is not committed | Run `bun run build`, then `bun link` |
 
 ## Reporting
